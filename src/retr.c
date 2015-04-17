@@ -37,6 +37,7 @@ as that of the covered work.  */
 #include <errno.h>
 #include <string.h>
 #include <assert.h>
+#include <zlib.h>
 #ifdef VMS
 # include <unixio.h>            /* For delete(). */
 #endif
@@ -249,6 +250,7 @@ fd_read_body (const char *downloaded_filename, int fd, FILE *out, wgint toread, 
 
   /* Used only by HTTP/HTTPS chunked transfer encoding.  */
   bool chunked = flags & rb_chunked_transfer_encoding;
+  bool encoded = flags & rb_gzip_content_encoding;
   wgint skip = 0;
 
   /* How much data we've read/written.  */
@@ -364,6 +366,13 @@ fd_read_body (const char *downloaded_filename, int fd, FILE *out, wgint toread, 
             }
         }
       ret = fd_read (fd, dlbuf, rdsize, tmout);
+
+      if (encoded)
+	printf ("[AJ] Data will be decoded here.\n");
+      else
+	printf ("[AJ] Data is already decoded. Nothing to be done.\n");
+
+      /* DECODE DATA HERE */
 
       if (progress_interactive && ret < 0 && errno == ETIMEDOUT)
         ret = 0;                /* interactive timeout, handled above */

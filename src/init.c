@@ -227,6 +227,7 @@ static const struct {
   { "netrc",            &opt.netrc,             cmd_boolean },
   { "noclobber",        &opt.noclobber,         cmd_boolean },
   { "noconfig",         &opt.noconfig,          cmd_boolean },
+  { "noencoding",       &opt.noencoding,          cmd_boolean },
   { "noparent",         &opt.no_parent,         cmd_boolean },
   { "noproxy",          &opt.no_proxy,          cmd_vector },
   { "numtries",         &opt.ntry,              cmd_number_inf },/* deprecated*/

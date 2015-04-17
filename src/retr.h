@@ -49,7 +49,8 @@ enum {
   rb_skip_startpos = 2,
 
   /* Used by HTTP/HTTPS*/
-  rb_chunked_transfer_encoding = 4
+  rb_chunked_transfer_encoding = 4,
+  rb_gzip_content_encoding = 8
 };
 
 int fd_read_body (const char *, int, FILE *, wgint, wgint, wgint *, wgint *, double *, int, FILE *);

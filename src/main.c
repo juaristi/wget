@@ -253,6 +253,7 @@ static struct cmdline_option option_data[] =
     { "no", 'n', OPT__NO, NULL, required_argument },
     { "no-clobber", 0, OPT_BOOLEAN, "noclobber", -1 },
     { "no-config", 0, OPT_BOOLEAN, "noconfig", -1},
+    { "no-encoding", 0, OPT_BOOLEAN, "noencoding", -1 },
     { "no-parent", 0, OPT_BOOLEAN, "noparent", -1 },
     { "output-document", 'O', OPT_VALUE, "outputdocument", -1 },
     { "output-file", 'o', OPT_VALUE, "logfile", -1 },
@@ -649,6 +650,9 @@ HTTP options:\n"),
        --auth-no-challenge         send Basic HTTP authentication information\n\
                                      without first waiting for the server's\n\
                                      challenge\n"),
+    N_("\
+	--no-encoding              do not request content-encoding on HTTP requests\n\
+	                             otherwise gzip will be requested"),
     "\n",
 
 #ifdef HAVE_SSL

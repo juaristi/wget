@@ -289,6 +289,8 @@ struct options
   bool show_all_dns_entries;    /* Show all the DNS entries when resolving a
                                    name. */
   bool report_bps;              /*Output bandwidth in bits format*/
+
+  bool noencoding;                /* Whether or not to request content-encoding in HTTP */
 };
 
 extern struct options opt;

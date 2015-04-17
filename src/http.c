@@ -127,6 +127,9 @@ static struct cookie_jar *wget_cookie_jar;
 #define HTTP_STATUS_UNAVAILABLE           503
 #define HTTP_STATUS_GATEWAY_TIMEOUT       504
 
+#define HTTP_ENCODING_IDENTITY            0
+#define HTTP_ENCODING_GZIP                1
+
 enum rp {
   rel_none, rel_name, rel_value, rel_both
 };
@@ -1548,7 +1551,8 @@ File %s already there; not retrieving.\n\n"), quote (filename));
 static int
 read_response_body (struct http_stat *hs, int sock, FILE *fp, wgint contlen,
                     wgint contrange, bool chunked_transfer_encoding,
-                    char *url, char *warc_timestamp_str, char *warc_request_uuid,
+		    int content_encoding, char *url,
+		    char *warc_timestamp_str, char *warc_request_uuid,
                     ip_address *warc_ip, char *type, int statcode, char *head)
 {
   int warc_payload_offset = 0;
@@ -1602,6 +1606,9 @@ read_response_body (struct http_stat *hs, int sock, FILE *fp, wgint contlen,
     flags |= rb_skip_startpos;
   if (chunked_transfer_encoding)
     flags |= rb_chunked_transfer_encoding;
+
+  if (content_encoding == HTTP_ENCODING_GZIP)
+    flags |= rb_gzip_content_encoding;
 
   hs->len = hs->restval;
   hs->rd_size = 0;
@@ -1730,7 +1737,18 @@ initialize_request (struct url *u, struct http_stat *hs, int *dt, struct url *pr
                         rel_value);
   SET_USER_AGENT (req);
   request_set_header (req, "Accept", "*/*", rel_none);
-  request_set_header (req, "Accept-Encoding", "identity", rel_none);
+
+  if (opt.noencoding)
+    {
+      request_set_header (req, "Accept-Encoding", "identity", rel_none);
+      printf ("\tEncoding WILL NOT be requested.\n");
+    }
+  else
+    {
+      /* no need to define "identity" content coding because it's always acceptable */
+      request_set_header (req, "Accept-Encoding", "gzip", rel_none);
+      printf ("\tEncoding WILL be requested.\n");
+    }
 
   /* Find the username and password for authentication. */
   *user = u->user;
@@ -2437,6 +2455,9 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
      is done. */
   bool keep_alive;
 
+  /* Is the server using a content coding, and which? */
+  int content_encoding;
+
   /* Is the server using the chunked transfer encoding?  */
   bool chunked_transfer_encoding = false;
 
@@ -2729,6 +2750,11 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
         }
     }
 
+  content_encoding = HTTP_ENCODING_IDENTITY;
+  if (resp_header_copy (resp, "Content-Encoding", hdrval, sizeof (hdrval))
+      && c_strcasecmp (hdrval, "gzip") == 0)
+    content_encoding = HTTP_ENCODING_GZIP;
+
   chunked_transfer_encoding = false;
   if (resp_header_copy (resp, "Transfer-Encoding", hdrval, sizeof (hdrval))
       && 0 == c_strcasecmp (hdrval, "chunked"))
@@ -2770,6 +2796,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
           type = resp_header_strdup (resp, "Content-Type");
           _err = read_response_body (hs, sock, NULL, contlen, 0,
                                     chunked_transfer_encoding,
+				    content_encoding,
                                     u->url, warc_timestamp_str,
                                     warc_request_uuid, warc_ip, type,
                                     statcode, head);
@@ -2954,6 +2981,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
             {
               int _err = read_response_body (hs, sock, NULL, contlen, 0,
                                             chunked_transfer_encoding,
+					    content_encoding,
                                             u->url, warc_timestamp_str,
                                             warc_request_uuid, warc_ip, type,
                                             statcode, head);
@@ -3120,6 +3148,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
         {
           int _err = read_response_body (hs, sock, NULL, contlen, 0,
                                         chunked_transfer_encoding,
+					content_encoding,
                                         u->url, warc_timestamp_str,
                                         warc_request_uuid, warc_ip, type,
                                         statcode, head);
@@ -3168,6 +3197,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
 
   err = read_response_body (hs, sock, fp, contlen, contrange,
                             chunked_transfer_encoding,
+			    content_encoding,
                             u->url, warc_timestamp_str,
                             warc_request_uuid, warc_ip, type,
                             statcode, head);
