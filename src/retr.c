@@ -197,6 +197,12 @@ write_data (FILE *out, FILE *out2, const char *buf, int bufsize,
     return 0;
 }
 
+static void
+decode_gzip (char *in, int len, char *out, int outlen)
+{
+
+}
+
 /* Read the contents of file descriptor FD until it the connection
    terminates or a read error occurs.  The data is read in portions of
    up to 16K and written to OUT as it arrives.  If opt.verbose is set,
@@ -373,6 +379,9 @@ fd_read_body (const char *downloaded_filename, int fd, FILE *out, wgint toread, 
 	printf ("[AJ] Data is already decoded. Nothing to be done.\n");
 
       /* DECODE DATA HERE */
+      char outlen = rdsize * 2;
+      char *out = (char *) xmalloc (rdsize);
+      decode_gzip (dlbuf, rdsize, out, outlen);
 
       if (progress_interactive && ret < 0 && errno == ETIMEDOUT)
         ret = 0;                /* interactive timeout, handled above */
