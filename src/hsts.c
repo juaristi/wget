@@ -35,7 +35,7 @@ as that of the covered work.  */
 
 #define DEFAULT_HSTS_HOSTS 2
 
-static struct hash_table known_hosts;
+static struct hash_table *known_hosts;
 
 struct hsts_key {
   char *name;
@@ -59,6 +59,7 @@ static time_t hsts_value (const char *val_start)
 
 static int hsts_key (const char *key_name)
 {
+  int i;
   for (i = 0; i < HSTS_KEYS; i++)
     {
       if (c_strcasecmp (key_name, hsts_keys[i].name) == 0)
