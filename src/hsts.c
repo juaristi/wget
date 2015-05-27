@@ -29,6 +29,8 @@ Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
 
+#include "xstrndup.h"
+#include "c-strcasestr.h"
 #include "hsts.h"
 #include "hash.h"
 #include "utils.h"
@@ -43,39 +45,94 @@ struct hsts_key {
     MAX_AGE,
     INCL_SD
   } id;
+  enum {
+    VAL_NUM,
+    VAL_NONE
+  } value_type;
 };
 static struct hsts_key hsts_keys[] = {
-    {"max-age", MAX_AGE},
-    {"includeSubDomains", INCL_SD}
+    {"max-age", MAX_AGE, VAL_NUM},
+    {"includeSubDomains", INCL_SD, VAL_NONE}
 };
 
 /* TODO complete */
-static time_t hsts_value (const char *val_start)
+static unsigned long hsts_convert_value (const char *s, const char *e)
 {
   return 0;
 }
 
-static int hsts_key (const char *key_name)
+static unsigned long hsts_parse_value (const char *val_start)
 {
-  int i;
-  for (i = 0; i < countof(hsts_keys); i++)
+  int state = 0;
+#define EQUAL_PASSED 1
+#define QUOTE_OPEN   2
+#define QUOTE_END    3
+#define VALUE_START  4
+#define VALUE_END    5
+  const char *p = val_start;
+  const char *vs = NULL, *ve = NULL;
+  unsigned long value = -1;
+
+  for (; state != VALUE_END || *p != '\0'; p++)
     {
-      if (c_strcasecmp (key_name, hsts_keys[i].name) == 0)
-	return hsts_keys[i].id;
+      switch (*p)
+      {
+	case '\t': /* fall through */
+	case ' ':
+	  continue;
+	case ';':
+	  if (state == QUOTE_END || state == VALUE_START)
+	    {
+	      if (state == VALUE_START)
+		ve = p - 1;
+	      state = VALUE_END;
+	    }
+	  break;
+	case '=':
+	  state = EQUAL_PASSED;
+	  break;
+	case '"':
+	  if (state == EQUAL_PASSED)
+	    state = QUOTE_OPEN;
+	  else if (state == QUOTE_OPEN)
+	    {
+	      state = QUOTE_END;
+	      if (value == -1)
+		value = 0;
+	    }
+	  else if (state == VALUE_START)
+	    {
+	      ve = p - 1;
+	      state = QUOTE_END;
+	    }
+	  break;
+	default:
+	  if (state == QUOTE_OPEN || state == EQUAL_PASSED)
+	    state = VALUE_START;
+	  if (state == VALUE_START)
+	    {
+	      if (vs == NULL)
+		vs = p;
+	    }
+	  break;
+      }
     }
-  return 0;
+
+  if (vs && ve)
+    value = hsts_convert_value (vs, ve);
+
+  return value;
 }
 
-static void hsts_process_key (struct hsts_kh *kh, const char *key,
-			      const char *val_start)
+static void hsts_parse_key (int key_id, const char *val_start, struct hsts_kh *kh)
 {
-  switch (hsts_key(key))
+  switch (key_id)
   {
+    case MAX_AGE:
+      kh->max_age = (time_t) hsts_parse_value (val_start);
+      break;
     case INCL_SD:
       kh->incl_subdomains = true;
-      break;
-    case MAX_AGE:
-      kh->max_age = hsts_value (val_start);
       break;
   }
 }
@@ -118,7 +175,17 @@ bool hsts_kh_match (struct url *u)
    *not* the whole header itself.  */
 struct hsts_kh *hsts_header_parse (const char *header)
 {
+  int i;
+  char *p;
   struct hsts_kh *kh = xnew0 (struct hsts_kh);
+
+  for (i = 0; i < countof(hsts_keys); i++)
+    {
+      p = c_strcasestr (header, hsts_keys[i].name);
+      if (p)
+	hsts_parse_key (hsts_keys[i].id, p + strlen(hsts_keys[i].name), kh);
+    }
+
   return kh;
 }
 
