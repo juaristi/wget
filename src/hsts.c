@@ -68,18 +68,6 @@ static int hsts_key (const char *key_name)
   return 0;
 }
 
-/* TODO complete */
-void hsts_store_load (const char *filename)
-{
-  known_hosts = make_nocase_string_hash_table (DEFAULT_HSTS_HOSTS);
-}
-
-/* TODO complete */
-void hsts_store_close (const char *filename)
-{
-  hash_table_destroy (known_hosts);
-}
-
 static void hsts_process_key (struct hsts_kh *kh, const char *key,
 			      const char *val_start)
 {
@@ -92,6 +80,30 @@ static void hsts_process_key (struct hsts_kh *kh, const char *key,
       kh->max_age = hsts_value (val_start);
       break;
   }
+}
+
+/* TODO complete
+   We're not intending to read/write the real HSTS database in this iteration.
+   That'll go later. So, this is OK like this.
+*/
+void hsts_store_load (const char *filename)
+{
+  known_hosts = make_nocase_string_hash_table (DEFAULT_HSTS_HOSTS);
+}
+
+/* TODO complete
+   Here same as in hsts_store_load().
+   We're not interacting with HSTS database yet.
+*/
+void hsts_store_close (const char *filename)
+{
+  hash_table_destroy (known_hosts);
+}
+
+/* TODO complete */
+bool hsts_kh_match (struct url *u)
+{
+  return true;
 }
 
 /* Parse a Strict-Transport-Security header field
@@ -107,4 +119,17 @@ static void hsts_process_key (struct hsts_kh *kh, const char *key,
 struct hsts_kh *hsts_header_parse (const char *header)
 {
   struct hsts_kh *kh = xnew0 (struct hsts_kh);
+  return kh;
+}
+
+/* TODO complete */
+bool hsts_new_kh (const char *hostname, struct hsts_kh *kh)
+{
+  return true;
+}
+
+/* TODO complete */
+void hsts_remove_kh (const char *hostname)
+{
+  return;
 }
