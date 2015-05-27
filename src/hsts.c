@@ -45,14 +45,10 @@ struct hsts_key {
     MAX_AGE,
     INCL_SD
   } id;
-  enum {
-    VAL_NUM,
-    VAL_NONE
-  } value_type;
 };
 static struct hsts_key hsts_keys[] = {
-    {"max-age", MAX_AGE, VAL_NUM},
-    {"includeSubDomains", INCL_SD, VAL_NONE}
+    {"max-age", MAX_AGE},
+    {"includeSubDomains", INCL_SD}
 };
 
 /* TODO complete */
