@@ -113,21 +113,36 @@ bool hsts_kh_match (struct url *u)
      directive                 = directive-name [ "=" directive-value ]
      directive-name            = token
      directive-value           = token | quoted-string
-*/
+
+   This function expects the _value_ of the Strict-Transport-Security header,
+   *not* the whole header itself.  */
 struct hsts_kh *hsts_header_parse (const char *header)
 {
   struct hsts_kh *kh = xnew0 (struct hsts_kh);
   return kh;
 }
 
-/* TODO complete */
+/* Add a new HSTS Known Host to the HSTS store.
+
+   Bear in mind that the store is kept in memory, and will not
+   be written to disk until hsts_store_save is called.
+   This function regrows the in-memory HSTS store if necessary.
+
+   TODO I'm not really sure whether this function should return a bool.
+   TODO What will happen with hosts with explicit port (eg. localhost:8080)?
+ */
 bool hsts_new_kh (const char *hostname, struct hsts_kh *kh)
 {
+  if (hash_table_contains (known_hosts, hostname))
+    hash_table_put (known_hosts, hostname, kh);
   return true;
 }
 
-/* TODO complete */
+/* Remove an HSTS Known Host from the HSTS store.
+   Attempting to remove a hostname which is not present in the store
+   is a no-op.  */
 void hsts_remove_kh (const char *hostname)
 {
-  return;
+  if (hash_table_contains (known_hosts, hostname))
+    hash_table_remove (known_hosts, hostname);
 }
