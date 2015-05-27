@@ -51,13 +51,7 @@ static struct hsts_key hsts_keys[] = {
     {"includeSubDomains", INCL_SD}
 };
 
-/* TODO complete */
-static unsigned long hsts_convert_value (const char *s, const char *e)
-{
-  return 0;
-}
-
-static unsigned long hsts_parse_value (const char *val_start)
+static char *hsts_parse_value (const char *val_start)
 {
   int state = 0;
 #define EQUAL_PASSED 1
@@ -67,7 +61,7 @@ static unsigned long hsts_parse_value (const char *val_start)
 #define VALUE_END    5
   const char *p = val_start;
   const char *vs = NULL, *ve = NULL;
-  unsigned long value = -1;
+  char *value = NULL;
 
   for (; state != VALUE_END || *p != '\0'; p++)
     {
@@ -93,8 +87,8 @@ static unsigned long hsts_parse_value (const char *val_start)
 	  else if (state == QUOTE_OPEN)
 	    {
 	      state = QUOTE_END;
-	      if (value == -1)
-		value = 0;
+	      if (value == NULL)
+		value = xstrdup ("");
 	    }
 	  else if (state == VALUE_START)
 	    {
@@ -115,17 +109,21 @@ static unsigned long hsts_parse_value (const char *val_start)
     }
 
   if (vs && ve)
-    value = hsts_convert_value (vs, ve);
+    value = xstrndup (vs, ve - vs);
 
   return value;
 }
 
 static void hsts_parse_key (int key_id, const char *val_start, struct hsts_kh *kh)
 {
+  char *val = NULL;
   switch (key_id)
   {
     case MAX_AGE:
-      kh->max_age = (time_t) hsts_parse_value (val_start);
+      val = hsts_parse_value (val_start);
+      /* TODO convert parsed value to time_t */
+      /* kh->max_age = (val ? xstrtoul (val) : -1) */
+      kh->max_age = 0;
       break;
     case INCL_SD:
       kh->incl_subdomains = true;
