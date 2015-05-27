@@ -49,8 +49,6 @@ static struct hsts_key hsts_keys[] = {
     {"includeSubDomains", INCL_SD}
 };
 
-#define HSTS_KEYS (sizeof (hsts_keys) / sizeof (hsts_keys[0]))
-
 /* TODO complete */
 static time_t hsts_value (const char *val_start)
 {
@@ -60,7 +58,7 @@ static time_t hsts_value (const char *val_start)
 static int hsts_key (const char *key_name)
 {
   int i;
-  for (i = 0; i < HSTS_KEYS; i++)
+  for (i = 0; i < countof(hsts_keys); i++)
     {
       if (c_strcasecmp (key_name, hsts_keys[i].name) == 0)
 	return hsts_keys[i].id;
