@@ -123,6 +123,7 @@ static void hsts_parse_key (int key_id, const char *val_start, struct hsts_kh *k
       val = hsts_parse_value (val_start);
       /* TODO convert parsed value to time_t */
       /* kh->max_age = (val ? xstrtoul (val) : -1) */
+      /* TODO xfree val if val != NULL */
       kh->max_age = 0;
       break;
     case INCL_SD:
