@@ -53,12 +53,15 @@ static struct hsts_key hsts_keys[] = {
 
 static char *hsts_parse_value (const char *val_start)
 {
-  int state = 0;
-#define EQUAL_PASSED 1
-#define QUOTE_OPEN   2
-#define QUOTE_END    3
-#define VALUE_START  4
-#define VALUE_END    5
+  enum {
+    INIT,
+    EQUAL_PASSED,
+    QUOTE_OPEN,
+    QUOTE_END,
+    VALUE_START,
+    VALUE_END
+  } state = INIT;
+
   const char *p = val_start;
   const char *vs = NULL, *ve = NULL;
   char *value = NULL;
