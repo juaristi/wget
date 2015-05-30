@@ -29,11 +29,11 @@ Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
 
-#include "xstrndup.h"
-#include "c-strcasestr.h"
 #include "hsts.h"
 #include "hash.h"
 #include "utils.h"
+#include "xstrndup.h"
+#include "c-strcasestr.h"
 
 #define DEFAULT_HSTS_HOSTS 2
 
@@ -127,7 +127,13 @@ static void hsts_parse_key (int key_id, const char *val_start, struct hsts_kh *k
       /* TODO convert parsed value to time_t */
       /* kh->max_age = (val ? xstrtoul (val) : -1) */
       /* TODO xfree val if val != NULL */
-      kh->max_age = 0;
+      if (val)
+	{
+	  kh->max_age = (time_t) strtol (val, NULL, 10);
+	  xfree (val);
+	}
+      else
+	kh->max_age = 0;
       break;
     case INCL_SD:
       kh->incl_subdomains = true;
