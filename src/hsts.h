@@ -34,21 +34,19 @@ as that of the covered work.  */
 
 #include "wget.h"
 #include "url.h"
+#include "hash.h"
 
-struct hsts_kh {
-  time_t created;
-  time_t max_age;
-  bool incl_subdomains;
-};
+typedef struct hash_table *hsts_store_t;
 
-void hsts_store_load (const char *filename);
-void hsts_store_close (const char *filename);
+bool hsts_match (struct url *u);
 
-bool hsts_kh_match (struct url *);
+bool hsts_store_entry (hsts_store_t store,
+		       enum url_scheme scheme, const char *host, int port,
+		       time_t max_age, bool include_subdomains);
 
-struct hsts_kh *hsts_header_parse (const char *);
+hsts_store_t hsts_store_open (const char *filename);
 
-bool hsts_new_kh (const char *, struct hsts_kh *);
-void hsts_remove_kh (const char *);
+void hsts_store_save (hsts_store_t store, const char *filename);
+void hsts_store_close (hsts_store_t store);
 
 #endif

@@ -29,12 +29,10 @@ Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
 
-#include "url.h"
-#include "hsts.h"
-#include "hash.h"
-#include "utils.h"
+#include <stdlib.h>
 
-typedef struct hash_table *hsts_store_t;
+#include "hsts.h"
+#include "utils.h"
 
 struct hsts_kh {
   char *host;
@@ -72,7 +70,7 @@ hsts_cmp_func (const void *h1, const void *h2)
 static struct hsts_kh_info *
 hsts_find_entry (hsts_store_t store,
 		 const char *host, int port,
-		 hsts_kh_match *match_type,
+		 enum hsts_kh_match *match_type,
 		 struct hsts_kh *kh)
 {
   return NULL;
@@ -85,10 +83,10 @@ hsts_is_host_eligible (enum url_scheme scheme, const char *host)
 }
 
 static void
-hsts_remove_entry (hsts_store_t store, struct hsts_kh entry)
+hsts_remove_entry (hsts_store_t store, struct hsts_kh *kh)
 {
-  xfree (entry->host);
-  hash_table_remove (store, entry);
+  xfree (kh->host);
+  hash_table_remove (store, kh);
 }
 
 static bool
@@ -104,7 +102,7 @@ hsts_new_entry (hsts_store_t store,
   kh->host = xstrdup (host);
   kh->port = port;
 
-  khi->created = time();
+  khi->created = time(NULL);
   khi->max_age = max_age;
   khi->include_subdomains = include_subdomains;
 
@@ -171,17 +169,17 @@ hsts_match (struct url *u)
  */
 bool
 hsts_store_entry (hsts_store_t store,
-		  url_scheme scheme, const char *host, int port,
+		  enum url_scheme scheme, const char *host, int port,
 		  time_t max_age, bool include_subdomains)
 {
   bool result = false;
-  hsts_kh_match match = 0;
-  struct hsts_kh kh;
+  enum hsts_kh_match match = 0;
+  struct hsts_kh *kh = xnew(struct hsts_kh);
   struct hsts_kh_info *entry = NULL;
 
   if (hsts_is_host_eligible (scheme, host))
     {
-      entry = hsts_find_entry (store, host, port, &match, &kh);
+      entry = hsts_find_entry (store, host, port, &match, kh);
       if (entry && match == CONGRUENT_MATCH)
 	{
 	  if (max_age == 0)
@@ -232,7 +230,7 @@ hsts_store_close (hsts_store_t store)
 
   /* free all the host fields */
   for (hash_table_iterate (store, &it); hash_table_iter_next (&it);)
-    xfree (((struct hsts_kh) it.key)->host);
+    xfree (((struct hsts_kh *) it.key)->host);
 
   hash_table_destroy (store);
 }
