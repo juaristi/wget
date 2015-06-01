@@ -58,9 +58,9 @@ enum hsts_kh_match {
 static unsigned long
 hsts_hash_func (const void *key)
 {
-  unsigned int hash = 0;
   struct hsts_kh *k = (struct hsts_kh *) key;
-  const char *h = xstrdup (k->host);
+  const char *h = k->host;
+  unsigned int hash = c_tolower (*h);
   char p[6];
   int p_len = 0, i = 0;
 
