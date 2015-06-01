@@ -29,191 +29,210 @@ Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
 
+#include "url.h"
 #include "hsts.h"
 #include "hash.h"
 #include "utils.h"
-#include "xstrndup.h"
-#include "c-strcasestr.h"
 
-#define DEFAULT_HSTS_HOSTS 2
+typedef struct hash_table *hsts_store_t;
 
-static struct hash_table *known_hosts;
-
-struct hsts_key {
-  char *name;
-  enum {
-    MAX_AGE,
-    INCL_SD
-  } id;
-};
-static struct hsts_key hsts_keys[] = {
-    {"max-age", MAX_AGE},
-    {"includeSubDomains", INCL_SD}
+struct hsts_kh {
+  char *host;
+  int port;
 };
 
-static char *hsts_parse_value (const char *val_start)
+struct hsts_kh_info {
+  time_t created;
+  time_t max_age;
+  bool include_subdomains;
+};
+
+enum hsts_kh_match {
+  SUPERDOMAIN_MATCH = 1,
+  CONGRUENT_MATCH
+};
+
+static unsigned long
+hsts_hash_func (const void *key)
 {
-  enum {
-    INIT,
-    EQUAL_PASSED,
-    QUOTE_OPEN,
-    QUOTE_END,
-    VALUE_START,
-    VALUE_END
-  } state = INIT;
+  struct hsts_kh *k = (struct hsts_kh *) key;
+  unsigned int h = 0;
+  return h;
+}
 
-  const char *p = val_start;
-  const char *vs = NULL, *ve = NULL;
-  char *value = NULL;
+static int
+hsts_cmp_func (const void *h1, const void *h2)
+{
+  struct hsts_kh *kh1 = (struct hsts_kh *) h1,
+      *kh2 = (struct hsts_kh *) h2;
 
-  for (; state != VALUE_END || *p != '\0'; p++)
+  return (!strcasecmp (kh1->host, kh2->host)) && (kh1->port == kh2->port);
+}
+
+static struct hsts_kh_info *
+hsts_find_entry (hsts_store_t store,
+		 const char *host, int port,
+		 hsts_kh_match *match_type,
+		 struct hsts_kh *kh)
+{
+  return NULL;
+}
+
+static bool
+hsts_is_host_eligible (enum url_scheme scheme, const char *host)
+{
+  return (scheme == SCHEME_HTTPS) && (!is_valid_ip_address (host));
+}
+
+static void
+hsts_remove_entry (hsts_store_t store, struct hsts_kh entry)
+{
+  xfree (entry->host);
+  hash_table_remove (store, entry);
+}
+
+static bool
+hsts_new_entry (hsts_store_t store,
+		const char *host, int port,
+		time_t max_age,
+		bool include_subdomains)
+{
+  struct hsts_kh *kh = xnew(struct hsts_kh);
+  struct hsts_kh_info *khi = xnew0(struct hsts_kh_info);
+  bool success = false;
+
+  kh->host = xstrdup (host);
+  kh->port = port;
+
+  khi->created = time();
+  khi->max_age = max_age;
+  khi->include_subdomains = include_subdomains;
+
+  /*
+     Check that it's valid.
+     Also, it might happen that time() returned -1.
+   */
+  if (khi->created != -1)
     {
-      switch (*p)
-      {
-	case '\t': /* fall through */
-	case ' ':
-	  continue;
-	case ';':
-	  if (state == QUOTE_END || state == VALUE_START)
-	    {
-	      if (state == VALUE_START)
-		ve = p - 1;
-	      state = VALUE_END;
-	    }
-	  break;
-	case '=':
-	  state = EQUAL_PASSED;
-	  break;
-	case '"':
-	  if (state == EQUAL_PASSED)
-	    state = QUOTE_OPEN;
-	  else if (state == QUOTE_OPEN)
-	    {
-	      state = QUOTE_END;
-	      if (value == NULL)
-		value = xstrdup ("");
-	    }
-	  else if (state == VALUE_START)
-	    {
-	      ve = p - 1;
-	      state = QUOTE_END;
-	    }
-	  break;
-	default:
-	  if (state == QUOTE_OPEN || state == EQUAL_PASSED)
-	    state = VALUE_START;
-	  if (state == VALUE_START)
-	    {
-	      if (vs == NULL)
-		vs = p;
-	    }
-	  break;
-      }
+      if ((khi->created + khi->max_age) > khi->created)
+	{
+	  hash_table_put (store, kh, khi);
+	  success = true;
+	}
     }
 
-  if (vs && ve)
-    value = xstrndup (vs, ve - vs);
+  if (!success)
+    {
+      /* abort! */
+      xfree (kh->host);
+      xfree (kh);
+      xfree (khi);
+    }
 
-  return value;
+  return success;
 }
 
-static void hsts_parse_key (int key_id, const char *val_start, struct hsts_kh *kh)
-{
-  char *val = NULL;
-  switch (key_id)
-  {
-    case MAX_AGE:
-      val = hsts_parse_value (val_start);
-      /* TODO convert parsed value to time_t */
-      /* kh->max_age = (val ? xstrtoul (val) : -1) */
-      /* TODO xfree val if val != NULL */
-      if (val)
-	{
-	  kh->max_age = (time_t) strtol (val, NULL, 10);
-	  xfree (val);
-	}
-      else
-	kh->max_age = 0;
-      break;
-    case INCL_SD:
-      kh->incl_subdomains = true;
-      break;
-  }
-}
-
-/* TODO complete
-   We're not intending to read/write the real HSTS database in this iteration.
-   That'll go later. So, this is OK like this.
-*/
-void hsts_store_load (const char *filename)
-{
-  known_hosts = make_nocase_string_hash_table (DEFAULT_HSTS_HOSTS);
-}
-
-/* TODO complete
-   Here same as in hsts_store_load().
-   We're not interacting with HSTS database yet.
-*/
-void hsts_store_close (const char *filename)
-{
-  hash_table_destroy (known_hosts);
-}
-
-/* TODO complete */
-bool hsts_kh_match (struct url *u)
+/*
+ * Changes the given URLs according to the HSTS policy.
+ *
+ * If there's no host in the store that either congruently
+ * or not, matches the given URL, no changes are made.
+ * Returns true if the URL was changed, or false
+ * if it was left intact.
+ */
+bool
+hsts_match (struct url *u)
 {
   return true;
 }
 
-/* Parse a Strict-Transport-Security header field
-   according to the following grammar:
-
-     Strict-Transport-Security = "Strict-Transport-Security" ":"
-                                 [ directive ]  *( ";" [ directive ] )
-
-     directive                 = directive-name [ "=" directive-value ]
-     directive-name            = token
-     directive-value           = token | quoted-string
-
-   This function expects the _value_ of the Strict-Transport-Security header,
-   *not* the whole header itself.  */
-struct hsts_kh *hsts_header_parse (const char *header)
-{
-  int i;
-  char *p;
-  struct hsts_kh *kh = xnew0 (struct hsts_kh);
-
-  for (i = 0; i < countof(hsts_keys); i++)
-    {
-      p = c_strcasestr (header, hsts_keys[i].name);
-      if (p)
-	hsts_parse_key (hsts_keys[i].id, p + strlen(hsts_keys[i].name), kh);
-    }
-
-  return kh;
-}
-
-/* Add a new HSTS Known Host to the HSTS store.
+/*
+ * Add a new HSTS Known Host to the HSTS store.
+ *
+ * If the host already exists, its information is updated,
+ * or it'll be removed from the store if max_age is zero.
 
    Bear in mind that the store is kept in memory, and will not
    be written to disk until hsts_store_save is called.
    This function regrows the in-memory HSTS store if necessary.
 
-   TODO I'm not really sure whether this function should return a bool.
-   TODO What will happen with hosts with explicit port (eg. localhost:8080)?
+   Currently, for a host to be taken into consideration,
+ * two conditions have to be met:
+ *   - Connection must be through a secure channel (HTTPS).
+ *   - The host must not be an IPv4 or IPv6 address.
+ *
+ * The RFC 6797 states that hosts that match IPv4 or IPv6 format
+ * should be discarded at URI rewrite time. But we short-circuit
+ * that check here, since there's no point in storing a host that
+ * will never be matched.
+ *
+ * Returns true if a new entry was actually created, or false
+ * if an existing entry was updated/deleted.
  */
-bool hsts_new_kh (const char *hostname, struct hsts_kh *kh)
+bool
+hsts_store_entry (hsts_store_t store,
+		  url_scheme scheme, const char *host, int port,
+		  time_t max_age, bool include_subdomains)
 {
-  if (hash_table_contains (known_hosts, hostname))
-    hash_table_put (known_hosts, hostname, kh);
-  return true;
+  bool result = false;
+  hsts_kh_match match = 0;
+  struct hsts_kh kh;
+  struct hsts_kh_info *entry = NULL;
+
+  if (hsts_is_host_eligible (scheme, host))
+    {
+      entry = hsts_find_entry (store, host, port, &match, &kh);
+      if (entry && match == CONGRUENT_MATCH)
+	{
+	  if (max_age == 0)
+	    hsts_remove_entry (store, kh);
+	  else if (max_age > 0)
+	    {
+	      entry->max_age = max_age;
+	      entry->include_subdomains = include_subdomains;
+	    }
+	  /* we ignore negative max_ages */
+	}
+      else if (entry == NULL || match == SUPERDOMAIN_MATCH)
+	{
+	  /* Either we didn't find a matching host,
+	   * or we got a superdomain match.
+	   * In either case, we create a new entry.
+	   *
+	   * We have to perform an explicit check because it might
+	   * happen we got a non-existent entry with max_age == 0.
+	   */
+	  hsts_new_entry (store, host, port, max_age, include_subdomains);
+	  result = true;
+	}
+      /* we ignore new entries with max_age == 0 */
+    }
+
+  return result;
 }
 
-/* Remove an HSTS Known Host from the HSTS store.
-   Attempting to remove a hostname which is not present in the store
-   is a no-op.  */
-void hsts_remove_kh (const char *hostname)
+hsts_store_t
+hsts_store_open (const char *filename)
 {
-  if (hash_table_contains (known_hosts, hostname))
-    hash_table_remove (known_hosts, hostname);
+  hsts_store_t store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
+  return store;
+}
+
+/* TODO next iteration */
+void
+hsts_store_save (hsts_store_t store, const char *filename)
+{
+  return;
+}
+
+void
+hsts_store_close (hsts_store_t store)
+{
+  hash_table_iterator it;
+
+  /* free all the host fields */
+  for (hash_table_iterate (store, &it); hash_table_iter_next (&it);)
+    xfree (((struct hsts_kh) it.key)->host);
+
+  hash_table_destroy (store);
 }
