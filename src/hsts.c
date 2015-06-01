@@ -33,6 +33,9 @@ as that of the covered work.  */
 
 #include "hsts.h"
 #include "utils.h"
+#ifdef TESTING
+#include "test.h"
+#endif
 
 struct hsts_kh {
   char *host;
@@ -50,12 +53,29 @@ enum hsts_kh_match {
   CONGRUENT_MATCH
 };
 
+/* Hashing and comparison functions for the hash table */
+
 static unsigned long
 hsts_hash_func (const void *key)
 {
+  unsigned int hash = 0;
   struct hsts_kh *k = (struct hsts_kh *) key;
-  unsigned int h = 0;
-  return h;
+  const char *h = xstrdup (k->host);
+  char p[6];
+  int p_len = 0, i = 0;
+
+  p_len = snprintf (p, 6, "%d", k->port);
+
+  if (hash)
+    {
+      for (h += 1; *h != '\0'; h++)
+	hash = (hash << 5) - hash + c_tolower (*h);
+
+      for (i = 0; i < p_len; i++)
+	hash = (hash << 5) - hash + p[i];
+    }
+
+  return hash;
 }
 
 static int
@@ -67,13 +87,86 @@ hsts_cmp_func (const void *h1, const void *h2)
   return (!strcasecmp (kh1->host, kh2->host)) && (kh1->port == kh2->port);
 }
 
+/* Private functions. Feel free to make some of these public when needed. */
+
+static enum hsts_kh_match
+hsts_match_type (const char *h1, const char *h2)
+{
+  const char *pi[2] = {h1, h2};
+  const char *p[2] = {h1 + strlen (h1), h2 + strlen (h2)};
+  int eq_labels[2] = {0, 0};
+  enum hsts_kh_match match_type = 0;
+
+  for (; p[0] >= pi[0] || p[1] >= pi[1]; p[0]--, p[1]--)
+    {
+      if (*p[0] != *p[1])
+	goto end;
+      if (*p[0] == '.')
+	{
+	  eq_labels[0]++;
+	  eq_labels[1]++;
+	}
+    }
+
+  if (eq_labels[0] == eq_labels[1])
+    match_type = CONGRUENT_MATCH;
+  else
+    match_type = SUPERDOMAIN_MATCH;
+
+end:
+  return match_type;
+}
+
+#define hsts_congruent_match(h1, h2) (hsts_match_type (h1, h2) == CONGRUENT_MATCH)
+#define hsts_superdomain_match(h1, h2) (hsts_match_type (h1, h2) == SUPERDOMAIN_MATCH)
+
 static struct hsts_kh_info *
 hsts_find_entry (hsts_store_t store,
 		 const char *host, int port,
 		 enum hsts_kh_match *match_type,
 		 struct hsts_kh *kh)
 {
-  return NULL;
+  struct hsts_kh *k = NULL;
+  struct hsts_kh_info *khi = NULL;
+  hash_table_iterator it;
+
+  /* TODO Refactor: avoid code repetition here. */
+
+  /* Look for congruent matches first */
+  for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
+    {
+      k = (struct hsts_kh *) it.key;
+      if (hsts_congruent_match (host, k->host) && k->port == port)
+	{
+	  khi = (struct hsts_kh_info *) it.value;
+	  if (match_type != NULL)
+	    *match_type = CONGRUENT_MATCH;
+	  if (kh != NULL)
+	    memcpy (kh, k, sizeof (struct hsts_kh));
+	}
+    }
+
+  if (khi)
+    goto end;
+
+  /* If no congruent matches were found,
+   * look for superdomain matches.
+   */
+  for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
+    {
+      k = (struct hsts_kh *) it.key;
+      if (hsts_superdomain_match (host, k->host) && k->port == port)
+	{
+	  khi = (struct hsts_kh_info *) it.value;
+	  if (match_type != NULL)
+	    *match_type = SUPERDOMAIN_MATCH;
+	  if (kh != NULL)
+	    memcpy (kh, k, sizeof (struct hsts_kh));
+	}
+    }
+
+end:
+  return khi;
 }
 
 static bool
@@ -129,6 +222,8 @@ hsts_new_entry (hsts_store_t store,
 
   return success;
 }
+
+/* HSTS API */
 
 /*
  * Changes the given URLs according to the HSTS policy.
@@ -234,3 +329,23 @@ hsts_store_close (hsts_store_t store)
 
   hash_table_destroy (store);
 }
+
+#ifdef TESTING
+const char *
+test_hsts_new_entry (void)
+{
+  hsts_store_t s = hsts_store_open ("foo");
+  mu_assert("Could not open the HSTS store. This could be due to lack of memory.", s != NULL);
+
+  bool created = hsts_store_entry (s, SCHEME_HTTP, "www.foo.com", 80, 1234, true);
+  mu_assert("No entry should have been created.", created == false);
+
+  created = hsts_store_entry (s, SCHEME_HTTPS, "www.foo.com", 443, 1234, true);
+  mu_assert("A new entry should have been created", created == true);
+
+  hsts_store_close (s);
+
+//  mu_assert("this should fail", false);
+  return NULL;
+}
+#endif
