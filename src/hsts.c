@@ -303,6 +303,8 @@ hsts_store_entry (hsts_store_t store,
       /* we ignore new entries with max_age == 0 */
     }
 
+  xfree(kh);
+
   return result;
 }
 
