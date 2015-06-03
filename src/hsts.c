@@ -36,6 +36,7 @@ as that of the covered work.  */
 #ifdef TESTING
 #include "test.h"
 #endif
+#include "c-ctype.h"
 
 struct hsts_kh {
   char *host;
@@ -49,7 +50,8 @@ struct hsts_kh_info {
 };
 
 enum hsts_kh_match {
-  SUPERDOMAIN_MATCH = 1,
+  NO_MATCH,
+  SUPERDOMAIN_MATCH,
   CONGRUENT_MATCH
 };
 
@@ -92,28 +94,24 @@ hsts_cmp_func (const void *h1, const void *h2)
 static enum hsts_kh_match
 hsts_match_type (const char *h1, const char *h2)
 {
+  /* TODO refactor */
   const char *pi[2] = {h1, h2};
-  const char *p[2] = {h1 + strlen (h1), h2 + strlen (h2)};
-  int eq_labels[2] = {0, 0};
-  enum hsts_kh_match match_type = 0;
+  const char *pe[2] = {h1 + strlen (h1) - 1, h2 + strlen (h2) - 1};
+  enum hsts_kh_match match_type = NO_MATCH;
 
-  for (; p[0] >= pi[0] || p[1] >= pi[1]; p[0]--, p[1]--)
+  while (pi[0] < pe[0] && pi[1] < pe[1])
     {
-      if (*p[0] != *p[1])
-	goto end;
-      if (*p[0] == '.')
-	{
-	  eq_labels[0]++;
-	  eq_labels[1]++;
-	}
+      if (c_tolower (*pe[0]) != c_tolower (*pe[1]))
+	break;
+      pe[0]--;
+      pe[1]--;
     }
 
-  if (eq_labels[0] == eq_labels[1])
+  if ((pe[0] == pi[0]) && (pe[1] == pi[1]) && (c_tolower (*pe[0]) == c_tolower (*pe[1])))
     match_type = CONGRUENT_MATCH;
-  else
+  else if ((pe[1] == pi[1]) && (*(pe[0] - 1) == '.') && ((pe[0] - 1) > pi[0]))
     match_type = SUPERDOMAIN_MATCH;
 
-end:
   return match_type;
 }
 
@@ -164,6 +162,10 @@ hsts_find_entry (hsts_store_t store,
 	    memcpy (kh, k, sizeof (struct hsts_kh));
 	}
     }
+
+  if (khi == NULL)
+    if (match_type != NULL)
+      *match_type = NO_MATCH;
 
 end:
   return khi;
@@ -268,7 +270,7 @@ hsts_store_entry (hsts_store_t store,
 		  time_t max_age, bool include_subdomains)
 {
   bool result = false;
-  enum hsts_kh_match match = 0;
+  enum hsts_kh_match match = NO_MATCH;
   struct hsts_kh *kh = xnew(struct hsts_kh);
   struct hsts_kh_info *entry = NULL;
 
@@ -325,7 +327,11 @@ hsts_store_close (hsts_store_t store)
 
   /* free all the host fields */
   for (hash_table_iterate (store, &it); hash_table_iter_next (&it);)
-    xfree (((struct hsts_kh *) it.key)->host);
+    {
+      xfree (((struct hsts_kh *) it.key)->host);
+      xfree (it.key);
+      xfree (it.value);
+    }
 
   hash_table_destroy (store);
 }
@@ -334,6 +340,9 @@ hsts_store_close (hsts_store_t store)
 const char *
 test_hsts_new_entry (void)
 {
+  enum hsts_kh_match match = NO_MATCH;
+  struct hsts_kh_info *khi = NULL;
+
   hsts_store_t s = hsts_store_open ("foo");
   mu_assert("Could not open the HSTS store. This could be due to lack of memory.", s != NULL);
 
@@ -343,9 +352,32 @@ test_hsts_new_entry (void)
   created = hsts_store_entry (s, SCHEME_HTTPS, "www.foo.com", 443, 1234, true);
   mu_assert("A new entry should have been created", created == true);
 
+  khi = hsts_find_entry (s, "www.foo.com", 443, &match, NULL);
+  mu_assert("Should've been a congruent match", match == CONGRUENT_MATCH);
+  mu_assert("No valid HSTS info was returned", khi != NULL);
+  mu_assert("Variable 'max_age' should be 1234", khi->max_age == 1234);
+  mu_assert("Variable 'include_subdomains' should be asserted", khi->include_subdomains == true);
+
+  khi = hsts_find_entry (s, "b.www.foo.com", 443, &match, NULL);
+  mu_assert("Should've been a superdomain match", match == SUPERDOMAIN_MATCH);
+  mu_assert("No valid HSTS info was returned", khi != NULL);
+  mu_assert("Variable 'max_age' should be 1234", khi->max_age == 1234);
+  mu_assert("Variable 'include_subdomains' should be asserted", khi->include_subdomains == true);
+
+  khi = hsts_find_entry (s, "ww.foo.com", 443, &match, NULL);
+  mu_assert("Should've been no match", match == NO_MATCH);
+
+  khi = hsts_find_entry (s, "foo.com", 443, &match, NULL);
+  mu_assert("Should've been no match", match == NO_MATCH);
+
+  khi = hsts_find_entry (s, ".foo.com", 443, &match, NULL);
+  mu_assert("Should've been no match", match == NO_MATCH);
+
+  khi = hsts_find_entry (s, ".www.foo.com", 443, &match, NULL);
+  mu_assert("Should've been no match", match == NO_MATCH);
+
   hsts_store_close (s);
 
-//  mu_assert("this should fail", false);
   return NULL;
 }
 #endif
