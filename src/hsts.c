@@ -40,7 +40,7 @@ as that of the covered work.  */
 
 struct hsts_kh {
   char *host;
-  int port;
+  int explicit_port;
 };
 
 struct hsts_kh_info {
@@ -66,7 +66,7 @@ hsts_hash_func (const void *key)
   char p[6];
   int p_len = 0, i = 0;
 
-  p_len = snprintf (p, 6, "%d", k->port);
+  p_len = snprintf (p, 6, "%d", k->explicit_port);
 
   if (hash)
     {
@@ -86,7 +86,7 @@ hsts_cmp_func (const void *h1, const void *h2)
   struct hsts_kh *kh1 = (struct hsts_kh *) h1,
       *kh2 = (struct hsts_kh *) h2;
 
-  return (!strcasecmp (kh1->host, kh2->host)) && (kh1->port == kh2->port);
+  return (!strcasecmp (kh1->host, kh2->host)) && (kh1->explicit_port == kh2->explicit_port);
 }
 
 /* Private functions. Feel free to make some of these public when needed. */
@@ -134,7 +134,7 @@ hsts_find_entry (hsts_store_t store,
   for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
     {
       k = (struct hsts_kh *) it.key;
-      if (hsts_congruent_match (host, k->host) && k->port == port)
+      if (hsts_congruent_match (host, k->host) && (k->explicit_port == port || k->explicit_port == 0))
 	{
 	  khi = (struct hsts_kh_info *) it.value;
 	  if (match_type != NULL)
@@ -153,7 +153,7 @@ hsts_find_entry (hsts_store_t store,
   for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
     {
       k = (struct hsts_kh *) it.key;
-      if (hsts_superdomain_match (host, k->host) && k->port == port)
+      if (hsts_superdomain_match (host, k->host) && (k->explicit_port == port || k->explicit_port == 0))
 	{
 	  khi = (struct hsts_kh_info *) it.value;
 	  if (match_type != NULL)
@@ -195,7 +195,7 @@ hsts_new_entry (hsts_store_t store,
   bool success = false;
 
   kh->host = xstrdup (host);
-  kh->port = port;
+  kh->explicit_port = (port != 443 ? port : 0);
 
   khi->created = time(NULL);
   khi->max_age = max_age;
