@@ -297,8 +297,7 @@ hsts_store_entry (hsts_store_t store,
 	   * We have to perform an explicit check because it might
 	   * happen we got a non-existent entry with max_age == 0.
 	   */
-	  hsts_new_entry (store, host, port, max_age, include_subdomains);
-	  result = true;
+	  result = hsts_new_entry (store, host, port, max_age, include_subdomains);
 	}
       /* we ignore new entries with max_age == 0 */
     }
