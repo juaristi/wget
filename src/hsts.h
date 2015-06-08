@@ -38,15 +38,13 @@ as that of the covered work.  */
 
 typedef struct hash_table *hsts_store_t;
 
-bool hsts_match (struct url *u);
+hsts_store_t hsts_store_open (const char *);
 
-bool hsts_store_entry (hsts_store_t store,
-		       enum url_scheme scheme, const char *host, int port,
-		       time_t max_age, bool include_subdomains);
+void hsts_store_save (hsts_store_t, const char *);
+void hsts_store_close (hsts_store_t);
 
-hsts_store_t hsts_store_open (const char *filename);
-
-void hsts_store_save (hsts_store_t store, const char *filename);
-void hsts_store_close (hsts_store_t store);
-
+bool hsts_store_entry (hsts_store_t,
+		       enum url_scheme, const char *, int,
+		       time_t, bool);
+bool hsts_match (hsts_store_t, struct url *);
 #endif

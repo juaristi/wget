@@ -51,6 +51,8 @@ const char *test_append_uri_pathel(void);
 const char *test_are_urls_equal(void);
 const char *test_is_robots_txt_url(void);
 const char *test_hsts_new_entry(void);
+const char *test_hsts_url_rewrite_superdomain(void);
+const char *test_hsts_url_rewrite_congruent(void);
 
 const char *program_argstring = "TEST";
 
@@ -69,6 +71,8 @@ all_tests(void)
   mu_run_test (test_are_urls_equal);
   mu_run_test (test_is_robots_txt_url);
   mu_run_test (test_hsts_new_entry);
+  mu_run_test (test_hsts_url_rewrite_superdomain);
+  mu_run_test (test_hsts_url_rewrite_congruent);
 
   return NULL;
 }
