@@ -180,8 +180,8 @@ hsts_is_host_eligible (enum url_scheme scheme, const char *host)
 static void
 hsts_remove_entry (hsts_store_t store, struct hsts_kh *kh)
 {
-  xfree (kh->host);
-  hash_table_remove (store, kh);
+  if (hash_table_remove (store, kh))
+    xfree (kh->host);
 }
 
 static bool
@@ -236,9 +236,36 @@ hsts_new_entry (hsts_store_t store,
  * if it was left intact.
  */
 bool
-hsts_match (struct url *u)
+hsts_match (hsts_store_t store, struct url *u)
 {
-  return true;
+  bool url_changed = false;
+  struct hsts_kh_info *entry = NULL;
+  struct hsts_kh *kh = xnew(struct hsts_kh);
+  enum hsts_kh_match match = NO_MATCH;
+
+  entry = hsts_find_entry (store, u->host, u->port, &match, kh);
+  if (entry)
+    {
+      if ((entry->created + entry->max_age) >= time(NULL))
+	{
+	  if ((match == CONGRUENT_MATCH) ||
+	      (match == SUPERDOMAIN_MATCH && entry->include_subdomains))
+	    {
+	      /* we found a matching Known HSTS Host
+	         rewrite the URL */
+	      u->scheme = SCHEME_HTTPS;
+	      if (u->port == 80)
+		u->port = 443;
+	      url_changed = true;
+	    }
+	}
+      else
+	hsts_remove_entry (store, kh);
+    }
+
+  xfree(kh);
+
+  return url_changed;
 }
 
 /*
@@ -376,6 +403,80 @@ test_hsts_new_entry (void)
 
   khi = hsts_find_entry (s, ".www.foo.com", 443, &match, NULL);
   mu_assert("Should've been no match", match == NO_MATCH);
+
+  hsts_store_close (s);
+
+  return NULL;
+}
+
+const char*
+test_hsts_url_rewrite_superdomain (void)
+{
+  struct url u;
+  hsts_store_t s;
+  bool created, result;
+
+  s = hsts_store_open ("foo");
+  mu_assert("Could not open the HSTS store", s != NULL);
+
+  created = hsts_store_entry (s, SCHEME_HTTPS, "www.foo.com", 443, time(NULL) + 1234, true);
+  mu_assert("A new entry should've been created", created == true);
+
+  u.host = xstrdup("www.foo.com");
+  u.port = 80;
+  u.scheme = SCHEME_HTTP;
+
+  result = hsts_match (s, &u);
+  mu_assert("URL: port should've been rewritten to 443", u.port == 443);
+  mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
+  mu_assert("result should have been true", result == true);
+
+  xfree(u.host);
+  u.host = xstrdup("bar.www.foo.com");
+  u.port = 80;
+  u.scheme = SCHEME_HTTP;
+
+  result = hsts_match (s, &u);
+  mu_assert("URL: port should've been rewritten to 443", u.port == 443);
+  mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
+  mu_assert("result should have been true", result == true);
+
+  hsts_store_close (s);
+
+  return NULL;
+}
+
+const char*
+test_hsts_url_rewrite_congruent (void)
+{
+  struct url u;
+  hsts_store_t s;
+  bool created, result;
+
+  s = hsts_store_open("foo");
+  mu_assert("Could not open the HSTS store", s != NULL);
+
+  created = hsts_store_entry (s, SCHEME_HTTPS, "foo.com", 443, time(NULL) + 1234, false);
+  mu_assert("A new entry should've been created", created == true);
+
+  u.host = xstrdup("foo.com");
+  u.port = 80;
+  u.scheme = SCHEME_HTTP;
+
+  result = hsts_match (s, &u);
+  mu_assert("URL: port should've been rewritten to 443", u.port == 443);
+  mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
+  mu_assert("result should have been true", result == true);
+
+  xfree(u.host);
+  u.host = xstrdup("www.foo.com");
+  u.port = 80;
+  u.scheme = SCHEME_HTTP;
+
+  result = hsts_match (s, &u);
+  mu_assert("URL: port should've been kept intact", u.port == 80);
+  mu_assert("URL: scheme should've been kept intact", u.scheme == SCHEME_HTTP);
+  mu_assert("result should have been false", result == false);
 
   hsts_store_close (s);
 
