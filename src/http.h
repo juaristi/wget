@@ -31,10 +31,12 @@ as that of the covered work.  */
 #ifndef HTTP_H
 #define HTTP_H
 
+#include "hsts.h"
+
 struct url;
 
 uerr_t http_loop (struct url *, struct url *, char **, char **, const char *,
-                  int *, struct url *, struct iri *);
+                  int *, struct url *, struct iri *, hsts_store_t);
 void save_cookies (void);
 void http_cleanup (void);
 time_t http_atotm (const char *);

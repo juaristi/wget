@@ -816,7 +816,7 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 	    DEBUGP(("URL transformed to HTTPS per HSTS policy"));
 	}
       result = http_loop (u, orig_parsed, &mynewloc, &local_file, refurl, dt,
-                          proxy_url, iri);
+                          proxy_url, iri, hsts_store);
     }
   else if (u->scheme == SCHEME_FTP)
     {

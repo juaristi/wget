@@ -42,6 +42,7 @@ as that of the covered work.  */
 
 #include "hash.h"
 #include "http.h"
+#include "hsts.h"
 #include "utils.h"
 #include "url.h"
 #include "host.h"
@@ -1253,6 +1254,53 @@ parse_content_disposition (const char *hdr, char **filename)
     return false;
 }
 
+static bool
+parse_strict_transport_security (const char *header, time_t *max_age, bool *include_subdomains)
+{
+  param_token name, value;
+  const char *c_max_age = NULL;
+  bool is = false; /* includeSubDomains */
+  bool is_url_encoded = false;
+  bool success = false;
+
+  if (header)
+    {
+      /* Process the STS header. Keys should be matched case-insensitively. */
+      for (; extract_param (&header, &name, &value, ';', &is_url_encoded); is_url_encoded = false)
+      {
+	if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "max-age"))
+	  c_max_age = strdupdelim (value.b, value.e);
+	else if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "includeSubDomains"))
+	  is = true;
+      }
+
+      /* pass the parsed values over */
+      if (c_max_age)
+	{
+	  /* If the string value goes out of a long's bounds, strtol() will return LONG_MIN or LONG_MAX.
+	   * In theory, the HSTS engine should be able to handle it.
+	   * Also, time_t is normally defined as a long, so this should not break.
+	   */
+	  if (max_age)
+	    *max_age = (time_t) strtol (c_max_age, NULL, 10);
+	  if (include_subdomains)
+	    *include_subdomains = is;
+
+	  logprintf (LOG_VERBOSE, "Parsed Strict-Transport-Security: max-age=%s; includeSubDomains=%s\n",
+	  		 c_max_age, (is ? "true" : "false"));
+
+	  success = true;
+	}
+      else
+	{
+	  /* something weird happened */
+	  logprintf (LOG_VERBOSE, "Could not parse String-Transport-Security header\n");
+	  success = false;
+	}
+    }
+
+  return success;
+}
 
 /* Persistent connections.  Currently, we cache the most recently used
    connection as persistent, provided that the HTTP server agrees to
@@ -2462,7 +2510,7 @@ set_content_type (int *dt, const char *type)
    server, and u->url will be requested.  */
 static uerr_t
 gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
-         struct iri *iri, int count)
+         struct iri *iri, int count, hsts_store_t hsts_store)
 {
   struct request *req = NULL;
 
@@ -2470,6 +2518,8 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   char *user, *passwd;
   char *proxyauth;
   const char *hsts_params;
+  time_t max_age;
+  bool include_subdomains;
   int statcode;
   int write_error;
   wgint contlen, contrange;
@@ -2937,21 +2987,11 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
     hs->error = xstrdup (message);
 
   hsts_params = resp_header_strdup (resp, "Strict-Transport-Security");
-  param_token name, value;
-  bool is_url_encoded;
-  if (hsts_params)
+  if (parse_strict_transport_security (hsts_params, &max_age, &include_subdomains))
     {
-      printf ("STS header found: %s\n", hsts_params);
-      /* process the STS header */
-      for (; extract_param (&hsts_params, &name, &value, ';', &is_url_encoded); is_url_encoded = false)
-	{
-	  if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "max-age"))
-	    {
-	      printf ("max-age: %s\n", strdupdelim (value.b, value.e));
-	    }
-	  else if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "includeSubdomains"))
-	    printf ("includeSubDomains: true\n");
-	}
+      /* process strict transport security */
+      if (hsts_store_entry (hsts_store, u->scheme, u->host, u->port, max_age, include_subdomains))
+	DEBUGP(("Added new HSTS host: %s:%d\n", u->host, u->port));
     }
 
   type = resp_header_strdup (resp, "Content-Type");
@@ -3314,7 +3354,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
 uerr_t
 http_loop (struct url *u, struct url *original_url, char **newloc,
            char **local_file, const char *referer, int *dt, struct url *proxy,
-           struct iri *iri)
+           struct iri *iri, hsts_store_t hsts_store)
 {
   int count;
   bool got_head = false;         /* used for time-stamping and filename detection */
@@ -3501,7 +3541,7 @@ Spider mode enabled. Check if remote file exists.\n"));
         *dt &= ~SEND_NOCACHE;
 
       /* Try fetching the document, or at least its head.  */
-      err = gethttp (u, &hstat, dt, proxy, iri, count);
+      err = gethttp (u, &hstat, dt, proxy, iri, count, hsts_store);
 
       /* Time?  */
       tms = datetime_str (time (NULL));
