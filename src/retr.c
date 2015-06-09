@@ -799,6 +799,10 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 #endif
       || (proxy_url && proxy_url->scheme == SCHEME_HTTP))
     {
+      if (opt.hsts)
+	printf ("HSTS will be used\n");
+      else
+	printf ("HSTS will NOT be used\n");
       result = http_loop (u, orig_parsed, &mynewloc, &local_file, refurl, dt,
                           proxy_url, iri);
     }

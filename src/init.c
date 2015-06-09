@@ -194,6 +194,7 @@ static const struct {
   { "ftpuser",          &opt.ftp_user,          cmd_string },
   { "glob",             &opt.ftp_glob,          cmd_boolean },
   { "header",           NULL,                   cmd_spec_header },
+  { "hsts",		&opt.hsts,		cmd_boolean },
   { "htmlextension",    &opt.adjust_extension,  cmd_boolean }, /* deprecated */
   { "htmlify",          NULL,                   cmd_spec_htmlify },
   { "httpkeepalive",    &opt.http_keep_alive,   cmd_boolean },
@@ -441,6 +442,9 @@ defaults (void)
   opt.start_pos = -1;
   opt.show_progress = -1;
   opt.noscroll = false;
+
+  /* HSTS is enabled by default */
+  opt.hsts = true;
 }
 
 /* Return the user's home directory (strdup-ed), or NULL if none is

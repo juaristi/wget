@@ -225,6 +225,7 @@ static struct cmdline_option option_data[] =
     { "header", 0, OPT_VALUE, "header", -1 },
     { "help", 'h', OPT_FUNCALL, (void *)print_help, no_argument },
     { "host-directories", 0, OPT_BOOLEAN, "addhostdir", -1 },
+    { "hsts", 0, OPT_BOOLEAN, "hsts", -1},
     { "html-extension", 'E', OPT_BOOLEAN, "adjustextension", -1 }, /* deprecated */
     { "htmlify", 0, OPT_BOOLEAN, "htmlify", -1 },
     { "http-keep-alive", 0, OPT_BOOLEAN, "httpkeepalive", -1 },
