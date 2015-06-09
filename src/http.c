@@ -2469,6 +2469,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   char *type = NULL;
   char *user, *passwd;
   char *proxyauth;
+  const char *hsts_params;
   int statcode;
   int write_error;
   wgint contlen, contrange;
@@ -2934,6 +2935,24 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
     hs->error = xstrdup (_("(no description)"));
   else
     hs->error = xstrdup (message);
+
+  hsts_params = resp_header_strdup (resp, "Strict-Transport-Security");
+  param_token name, value;
+  bool is_url_encoded;
+  if (hsts_params)
+    {
+      printf ("STS header found: %s\n", hsts_params);
+      /* process the STS header */
+      for (; extract_param (&hsts_params, &name, &value, ';', &is_url_encoded); is_url_encoded = false)
+	{
+	  if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "max-age"))
+	    {
+	      printf ("max-age: %s\n", strdupdelim (value.b, value.e));
+	    }
+	  else if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "includeSubdomains"))
+	    printf ("includeSubDomains: true\n");
+	}
+    }
 
   type = resp_header_strdup (resp, "Content-Type");
   if (type)

@@ -56,6 +56,7 @@ as that of the covered work.  */
 #include "ptimer.h"
 #include "html-url.h"
 #include "iri.h"
+#include "hsts.h"
 
 /* Total size of downloaded files.  Used to enforce quota.  */
 SUM_SIZE_INT total_downloaded_bytes;
@@ -733,6 +734,8 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
   char *saved_method = NULL;
   char *saved_body_file_name = NULL;
 
+  hsts_store_t hsts_store = NULL;
+
   /* If dt is NULL, use local storage.  */
   if (!dt)
     {
@@ -747,6 +750,14 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 
   if (!refurl)
     refurl = opt.referer;
+
+  if (opt.hsts)
+    {
+      hsts_store = hsts_store_open ("foo");
+      if (!hsts_store)
+	logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store. HSTS will be disabled.\n");
+      /* from here on, it's enough to check hsts_store alone */
+    }
 
  redirected:
   /* (also for IRI fallbacking) */
@@ -799,10 +810,11 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 #endif
       || (proxy_url && proxy_url->scheme == SCHEME_HTTP))
     {
-      if (opt.hsts)
-	printf ("HSTS will be used\n");
-      else
-	printf ("HSTS will NOT be used\n");
+      if (hsts_store)
+	{
+	  if (hsts_match (hsts_store, u))
+	    DEBUGP(("URL transformed to HTTPS per HSTS policy"));
+	}
       result = http_loop (u, orig_parsed, &mynewloc, &local_file, refurl, dt,
                           proxy_url, iri);
     }
@@ -992,6 +1004,10 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 bail:
   if (register_status)
     inform_exit_status (result);
+
+  if (hsts_store)
+    hsts_store_close (hsts_store);
+
   return result;
 }
 
