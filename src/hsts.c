@@ -32,6 +32,7 @@ as that of the covered work.  */
 #include <stdlib.h>
 
 #include "hsts.h"
+#include "host.h" /* for is_valid_ip_address() */
 #include "utils.h"
 #ifdef TESTING
 #include "test.h"
