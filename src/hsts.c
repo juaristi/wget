@@ -30,6 +30,7 @@ shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
 
 #include <stdlib.h>
+#include <time.h>
 
 #include "hsts.h"
 #include "host.h" /* for is_valid_ip_address() */
@@ -96,9 +97,13 @@ static enum hsts_kh_match
 hsts_match_type (const char *h1, const char *h2)
 {
   /* TODO refactor */
-  const char *pi[2] = {h1, h2};
-  const char *pe[2] = {h1 + strlen (h1) - 1, h2 + strlen (h2) - 1};
+  const char *pi[2], *pe[2];
   enum hsts_kh_match match_type = NO_MATCH;
+
+  pi[0] = h1;
+  pi[1] = h2;
+  pe[0] = h1 + strlen (h1) - 1;
+  pe[1] = h2 + strlen (h2) - 1;
 
   while (pi[0] < pe[0] && pi[1] < pe[1])
     {
