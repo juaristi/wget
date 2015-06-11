@@ -260,7 +260,7 @@ hsts_parse_line (const char *line,
       *port_s = NULL,
       *port_e = NULL;
 
-  for (p = line; p != '\0'; p++)
+  for (p = line; *p != '\0'; p++)
     {
       switch (state)
       {
