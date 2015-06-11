@@ -34,6 +34,7 @@ as that of the covered work.  */
 
 #include "hsts.h"
 #include "host.h" /* for is_valid_ip_address() */
+#include "init.h" /* for home_dir() */
 #include "utils.h"
 #ifdef TESTING
 #include "test.h"
@@ -213,7 +214,7 @@ hsts_new_entry (hsts_store_t store,
    */
   if (khi->created != -1)
     {
-      if ((khi->created + khi->max_age) > khi->created)
+      if (((khi->created + khi->max_age) > khi->created) && (!hash_table_contains (store, kh)))
 	{
 	  hash_table_put (store, kh, khi);
 	  success = true;
@@ -229,6 +230,116 @@ hsts_new_entry (hsts_store_t store,
     }
 
   return success;
+}
+
+#define SETPARAM(p, v) do { \
+    if (p != NULL) \
+      *p = v; \
+} while (0)
+
+/* TODO implement */
+static bool
+hsts_parse_line (const char *line,
+		 char **host, int *port,
+		 time_t *created, time_t *max_age,
+		 bool *include_subdomains)
+{
+  /* here comes the state machine! */
+  enum {
+    INITIAL,
+    IN_HOST,
+    IN_PORT,
+    IN_DELIM_1,
+    IN_DELIM_2,
+    INVALID
+  } state = INITIAL;
+
+  const char *p = NULL;
+  char *host_s = NULL,
+      *host_e = NULL,
+      *port_s = NULL,
+      *port_e = NULL;
+
+  for (p = line; p != '\0'; p++)
+    {
+      switch (state)
+      {
+	case INITIAL:
+	  state = IN_HOST;
+	  if (*p == '.')
+	    {
+	      SETPARAM(include_subdomains, true);
+	      break;
+	    }
+	  else
+	    SETPARAM(include_subdomains, false);
+	  /* fall through */
+	case IN_HOST:
+	  if (host_s == NULL)
+	    host_s = p;
+	  if (!(c_isalnum (*p) || *p == '.'))
+	    {
+	      host_e = (p - 1);
+	      if (*p == ':')
+		state = IN_PORT;
+	      else if (c_isspace (*p))
+		state = IN_DELIM_1;
+	      else
+		state = INVALID;
+	    }
+	  break;
+	case IN_PORT:
+	  if (port_s == NULL)
+	    port_s = p;
+	  if (!c_isdigit (*p))
+	    {
+	      port_e = (p - 1);
+	      /* now a compulsory LWS should come */
+	      state = (c_isspace (*p) ? IN_DELIM_1 : INVALID);
+	    }
+	  break;
+	case IN_DELIM_1:
+	  /* TODO implement */
+	  break;
+	case IN_DELIM_2:
+	  /* TODO implement */
+	  break;
+	case INVALID:
+	default:
+	  /* we reached an inconsistent state */
+	  /* TODO maybe we should report where exactly the parsing error happened? */
+	  return false;
+      }
+    }
+
+  return true;
+}
+
+static void
+hsts_read_database (hsts_store_t store, const char *file)
+{
+  FILE *fp = NULL;
+  char *line = NULL;
+  size_t len = 0;
+
+  char *host = NULL;
+  int port = 0;
+  time_t created, max_age;
+  bool include_subdomains;
+
+  if ((fp = fopen (file, "r")))
+    {
+      while (getline (&line, &len, fp) > 0)
+	{
+	  if (line[0] == '#')
+	    goto next;
+	  if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains))
+	    hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains);
+	  next:
+	  xfree (line);
+	}
+      fclose (fp);
+    }
 }
 
 /* HSTS API */
@@ -343,7 +454,18 @@ hsts_store_entry (hsts_store_t store,
 hsts_store_t
 hsts_store_open (const char *filename)
 {
-  hsts_store_t store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
+  hsts_store_t store;
+  char *home, *file;
+
+  store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
+
+  /* TODO check --hsts-file */
+  if ((home = home_dir ()))
+    {
+      file = aprintf ("%s/.wget-hsts", home);
+      hsts_read_database (store, file);
+    }
+
   return store;
 }
 
