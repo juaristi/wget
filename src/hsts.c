@@ -194,7 +194,7 @@ hsts_remove_entry (hsts_store_t store, struct hsts_kh *kh)
 static bool
 hsts_new_entry (hsts_store_t store,
 		const char *host, int port,
-		time_t max_age,
+		time_t created, time_t max_age,
 		bool include_subdomains)
 {
   struct hsts_kh *kh = xnew(struct hsts_kh);
@@ -204,7 +204,7 @@ hsts_new_entry (hsts_store_t store,
   kh->host = xstrdup (host);
   kh->explicit_port = (port != 443 ? port : 0);
 
-  khi->created = time(NULL);
+  khi->created = created;
   khi->max_age = max_age;
   khi->include_subdomains = include_subdomains;
 
@@ -216,6 +216,7 @@ hsts_new_entry (hsts_store_t store,
     {
       if (((khi->created + khi->max_age) > khi->created) && (!hash_table_contains (store, kh)))
 	{
+	  printf ("[DEBUG HSTS] Storing %s:%d (created=%d, max_age=%d, incl_sd=%s)\n", host, port, created, max_age, (include_subdomains ? "true" : "false"));
 	  hash_table_put (store, kh, khi);
 	  success = true;
 	}
@@ -237,13 +238,14 @@ hsts_new_entry (hsts_store_t store,
       *p = v; \
 } while (0)
 
-/* TODO implement */
 static bool
 hsts_parse_line (const char *line,
 		 char **host, int *port,
 		 time_t *created, time_t *max_age,
 		 bool *include_subdomains)
 {
+  bool result = true;
+
   /* here comes the state machine! */
   enum {
     INITIAL,
@@ -251,16 +253,26 @@ hsts_parse_line (const char *line,
     IN_PORT,
     IN_DELIM_1,
     IN_DELIM_2,
+    IN_CREATED,
+    IN_MAX_AGE,
     INVALID
   } state = INITIAL;
 
   const char *p = NULL;
-  char *host_s = NULL,
+  const char *host_s = NULL,
       *host_e = NULL,
       *port_s = NULL,
-      *port_e = NULL;
+      *port_e = NULL,
+      *created_s = NULL,
+      *created_e = NULL,
+      *max_age_s = NULL,
+      *max_age_e = NULL;
 
-  for (p = line; p != '\0'; p++)
+  const char *str_port = NULL,
+      *str_created = NULL,
+      *str_max_age = NULL;
+
+  for (p = line; p != '\0' && max_age_e == NULL && result == true; p++)
     {
       switch (state)
       {
@@ -279,7 +291,7 @@ hsts_parse_line (const char *line,
 	    host_s = p;
 	  if (!(c_isalnum (*p) || *p == '.'))
 	    {
-	      host_e = (p - 1);
+	      host_e = p;
 	      if (*p == ':')
 		state = IN_PORT;
 	      else if (c_isspace (*p))
@@ -293,26 +305,81 @@ hsts_parse_line (const char *line,
 	    port_s = p;
 	  if (!c_isdigit (*p))
 	    {
-	      port_e = (p - 1);
+	      port_e = p;
 	      /* now a compulsory LWS should come */
 	      state = (c_isspace (*p) ? IN_DELIM_1 : INVALID);
 	    }
 	  break;
 	case IN_DELIM_1:
-	  /* TODO implement */
+	  if (!c_isspace (*p))
+	    {
+	      if (created_s == NULL)
+		created_s = p;
+	      state = IN_CREATED;
+	    }
 	  break;
 	case IN_DELIM_2:
-	  /* TODO implement */
+	  if (!c_isspace (*p))
+	    {
+	      if (max_age_s == NULL)
+		max_age_s = p;
+	      state = IN_MAX_AGE;
+	    }
+	  break;
+	case IN_CREATED:
+	  if (!c_isdigit (*p))
+	    {
+	      created_e = p;
+	      /* compulsory LWS */
+	      state = (c_isspace (*p) ? IN_DELIM_2 : INVALID);
+	    }
+	  break;
+	case IN_MAX_AGE:
+	  if (!c_isdigit (*p))
+	    {
+	      if (c_isspace (*p))
+		max_age_e = p;
+	      else
+		state = INVALID;
+	    }
 	  break;
 	case INVALID:
 	default:
 	  /* we reached an inconsistent state */
 	  /* TODO maybe we should report where exactly the parsing error happened? */
-	  return false;
+	  result = false;
       }
     }
 
-  return true;
+  if (result == false)
+    goto end;
+
+  if (max_age_e == NULL)
+    max_age_e = p;
+
+  if (host != NULL && host_s && host_e)
+    *host = strdupdelim (host_s, host_e);
+  if (port != NULL && port_s && port_e)
+    {
+      str_port = strdupdelim (port_s, port_e);
+      *port = atoi (str_port);
+      xfree(str_port);
+    }
+  if (created != NULL && created_s && created_e)
+    {
+      str_created = strdupdelim (created_s, created_e);
+      *created = (time_t) strtol (str_created, NULL, 10);
+      xfree(str_created);
+    }
+  if (max_age != NULL && max_age_s && max_age_e)
+    {
+      str_max_age = strdupdelim (max_age_s, max_age_e);
+      *max_age = (time_t) strtol (str_max_age, NULL, 10);
+      xfree(str_max_age);
+    }
+
+end:
+  return result;
 }
 
 static void
@@ -333,8 +400,9 @@ hsts_read_database (hsts_store_t store, const char *file)
 	{
 	  if (line[0] == '#')
 	    goto next;
+	  /* TODO check returned values */
 	  if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains))
-	    hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains);
+	    hsts_new_entry (store, host, port == 0 ? 443 : port, created, max_age, include_subdomains);
 	  next:
 	  xfree (line);
 	}
@@ -441,7 +509,7 @@ hsts_store_entry (hsts_store_t store,
 	   * We have to perform an explicit check because it might
 	   * happen we got a non-existent entry with max_age == 0.
 	   */
-	  result = hsts_new_entry (store, host, port, max_age, include_subdomains);
+	  result = hsts_new_entry (store, host, port, time(NULL), max_age, include_subdomains);
 	}
       /* we ignore new entries with max_age == 0 */
     }
@@ -451,6 +519,7 @@ hsts_store_entry (hsts_store_t store,
   return result;
 }
 
+/* TODO check or remove parameter *filename */
 hsts_store_t
 hsts_store_open (const char *filename)
 {
