@@ -59,6 +59,20 @@ enum hsts_kh_match {
   CONGRUENT_MATCH
 };
 
+#define hsts_is_host_name_valid(host) (!is_valid_ip_address (host))
+#define hsts_is_scheme_valid(scheme) (scheme == SCHEME_HTTPS)
+#define hsts_is_host_eligible(scheme, host) \
+    (hsts_is_scheme_valid (scheme) && hsts_is_host_name_valid (host))
+
+#define DEFAULT_SSL_PORT 443
+#define CHECK_EXPLICIT_PORT(p1, p2) (p1 == 0 || p1 == p2)
+#define MAKE_EXPLICIT_PORT(p) (p == DEFAULT_SSL_PORT ? 0 : p)
+
+#define SETPARAM(p, v) do { \
+    if (p != NULL) \
+      *p = v; \
+  } while (0)
+
 /* Hashing and comparison functions for the hash table */
 
 static unsigned long
@@ -69,7 +83,7 @@ hsts_hash_func (const void *key)
   unsigned int hash = k->explicit_port;
 
   for (h = k->host; *h; h++)
-    hash = hash * 31 + c_tolower (*h);
+    hash = hash * 31 + *h;
 
   return hash;
 }
@@ -80,7 +94,7 @@ hsts_cmp_func (const void *h1, const void *h2)
   struct hsts_kh *kh1 = (struct hsts_kh *) h1,
       *kh2 = (struct hsts_kh *) h2;
 
-  return (!strcasecmp (kh1->host, kh2->host)) && (kh1->explicit_port == kh2->explicit_port);
+  return (!strcmp (kh1->host, kh2->host)) && (kh1->explicit_port == kh2->explicit_port);
 }
 
 /* Private functions. Feel free to make some of these public when needed. */
@@ -132,11 +146,10 @@ hsts_find_entry (hsts_store_t store,
   for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
     {
       k = (struct hsts_kh *) it.key;
-      if (hsts_congruent_match (host, k->host) && (k->explicit_port == port || k->explicit_port == 0))
+      if (hsts_congruent_match (host, k->host) && CHECK_EXPLICIT_PORT (k->explicit_port, port))
 	{
 	  khi = (struct hsts_kh_info *) it.value;
-	  if (match_type != NULL)
-	    *match_type = CONGRUENT_MATCH;
+	  SETPARAM (match_type, CONGRUENT_MATCH);
 	  if (kh != NULL)
 	    memcpy (kh, k, sizeof (struct hsts_kh));
 	}
@@ -151,11 +164,10 @@ hsts_find_entry (hsts_store_t store,
   for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
     {
       k = (struct hsts_kh *) it.key;
-      if (hsts_superdomain_match (host, k->host) && (k->explicit_port == port || k->explicit_port == 0))
+      if (hsts_superdomain_match (host, k->host) && CHECK_EXPLICIT_PORT (k->explicit_port, port))
 	{
 	  khi = (struct hsts_kh_info *) it.value;
-	  if (match_type != NULL)
-	    *match_type = SUPERDOMAIN_MATCH;
+	  SETPARAM (match_type, SUPERDOMAIN_MATCH);
 	  if (kh != NULL)
 	    memcpy (kh, k, sizeof (struct hsts_kh));
 	}
@@ -170,49 +182,45 @@ end:
 }
 
 static bool
-hsts_is_host_eligible (enum url_scheme scheme, const char *host)
+hsts_new_entry_internal (hsts_store_t store,
+			 const char *host, int port,
+			 time_t created, time_t max_age,
+			 bool include_subdomains,
+			 bool check_expired,
+			 bool check_duplicates)
 {
-  return (scheme == SCHEME_HTTPS) && (!is_valid_ip_address (host));
-}
-
-static void
-hsts_remove_entry (hsts_store_t store, struct hsts_kh *kh)
-{
-  if (hash_table_remove (store, kh))
-    xfree (kh->host);
-}
-
-static bool
-hsts_new_entry (hsts_store_t store,
-		const char *host, int port,
-		time_t created, time_t max_age,
-		bool include_subdomains)
-{
-  struct hsts_kh *kh = xnew(struct hsts_kh);
-  struct hsts_kh_info *khi = xnew0(struct hsts_kh_info);
+  struct hsts_kh *kh = xnew (struct hsts_kh);
+  struct hsts_kh_info *khi = xnew0 (struct hsts_kh_info);
   bool success = false;
+  int i = 0;
 
   kh->host = xstrdup (host);
-  kh->explicit_port = (port != 443 ? port : 0);
+  kh->explicit_port = MAKE_EXPLICIT_PORT (port);
 
   khi->created = created;
   khi->max_age = max_age;
   khi->include_subdomains = include_subdomains;
 
-  /*
-     Check that it's valid.
-     Also, it might happen that time() returned -1.
-   */
-  if (khi->created != -1)
-    {
-      if (((khi->created + khi->max_age) > khi->created) && (!hash_table_contains (store, kh)))
-	{
-	  printf ("[DEBUG HSTS] Storing %s:%d (created=%d, max_age=%d, incl_sd=%s)\n", host, port, created, max_age, (include_subdomains ? "true" : "false"));
-	  hash_table_put (store, kh, khi);
-	  success = true;
-	}
-    }
+  for (i = 0; i < strlen (kh->host); i++)
+    kh->host[i] = c_tolower (kh->host[i]);
 
+  /* Check validity */
+  if (!hsts_is_host_name_valid (host))
+    goto bail;
+
+  if (check_expired && ((khi->created + khi->max_age) < khi->created))
+    goto bail;
+
+  if (check_duplicates && hash_table_contains (store, kh))
+    goto bail;
+
+  /* Now store the new entry */
+  /* TODO remove this printf() call */
+  printf ("[DEBUG HSTS] Storing %s:%d (created=%d, max_age=%d, incl_sd=%s)\n", host, port, created, max_age, (include_subdomains ? "true" : "false"));
+  hash_table_put (store, kh, khi);
+  success = true;
+
+bail:
   if (!success)
     {
       /* abort! */
@@ -224,10 +232,29 @@ hsts_new_entry (hsts_store_t store,
   return success;
 }
 
-#define SETPARAM(p, v) do { \
-    if (p != NULL) \
-      *p = v; \
-} while (0)
+/*
+   Creates a new entry, but does not check whether that entry already exists.
+   This function assumes that check has already been done by the caller.
+ */
+static bool
+hsts_new_entry (hsts_store_t store,
+		const char *host, int port,
+		time_t max_age, bool include_subdomains)
+{
+  time_t t = time (NULL);
+
+  /* It might happen time() returned -1 */
+  return (t < 0 ?
+      false :
+      hsts_new_entry_internal (store, host, port, t, max_age, include_subdomains, true, false));
+}
+
+static void
+hsts_remove_entry (hsts_store_t store, struct hsts_kh *kh)
+{
+  if (hash_table_remove (store, kh))
+    xfree (kh->host);
+}
 
 static bool
 hsts_parse_line (const char *line,
@@ -263,7 +290,7 @@ hsts_parse_line (const char *line,
       *str_created = NULL,
       *str_max_age = NULL;
 
-  for (p = line; p != '\0' && max_age_e == NULL && result == true; p++)
+  for (p = line; *p && max_age_e == NULL && result == true; p++)
     {
       switch (state)
       {
@@ -382,19 +409,20 @@ hsts_read_database (hsts_store_t store, const char *file)
 
   char *host = NULL;
   int port = 0;
-  time_t created, max_age;
-  bool include_subdomains;
+  time_t created = 0, max_age = 0;
+  bool include_subdomains = false;
 
-  if ((fp = fopen (file, "r")))
+  fp = fopen (file, "r");
+  if (fp)
     {
       while (getline (&line, &len, fp) > 0)
 	{
-	  if (line[0] == '#')
-	    goto next;
-	  /* TODO check returned values */
-	  if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains))
-	    hsts_new_entry (store, host, port == 0 ? 443 : port, created, max_age, include_subdomains);
-	  next:
+	  if (line[0] != '#')
+	    {
+	      if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains) &&
+		  host && created && max_age)
+		hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, false);
+	    }
 	  xfree (line);
 	}
       fclose (fp);
@@ -475,6 +503,7 @@ hsts_store_entry (hsts_store_t store,
   enum hsts_kh_match match = NO_MATCH;
   struct hsts_kh *kh = xnew(struct hsts_kh);
   struct hsts_kh_info *entry = NULL;
+  time_t t = 0;
 
   if (hsts_is_host_eligible (scheme, host))
     {
@@ -485,21 +514,29 @@ hsts_store_entry (hsts_store_t store,
 	    hsts_remove_entry (store, kh);
 	  else if (max_age > 0)
 	    {
-	      entry->max_age = max_age;
-	      entry->include_subdomains = include_subdomains;
+	      if (entry->include_subdomains != include_subdomains)
+		entry->include_subdomains = include_subdomains;
+	      if (entry->max_age != max_age)
+		{
+		  /* RFC 6797 states that 'max_age' is a TTL relative to the reception of the STS header */
+		  t = time (NULL);
+		  if (t != -1)
+		    entry->created = t;
+		  entry->max_age = max_age;
+		}
 	    }
 	  /* we ignore negative max_ages */
 	}
       else if (entry == NULL || match == SUPERDOMAIN_MATCH)
 	{
 	  /* Either we didn't find a matching host,
-	   * or we got a superdomain match.
-	   * In either case, we create a new entry.
-	   *
-	   * We have to perform an explicit check because it might
-	   * happen we got a non-existent entry with max_age == 0.
+	     or we got a superdomain match.
+	     In either case, we create a new entry.
+
+	     We have to perform an explicit check because it might
+	     happen we got a non-existent entry with max_age == 0.
 	   */
-	  result = hsts_new_entry (store, host, port, time(NULL), max_age, include_subdomains);
+	  result = hsts_new_entry (store, host, port, max_age, include_subdomains);
 	}
       /* we ignore new entries with max_age == 0 */
     }
@@ -509,21 +546,11 @@ hsts_store_entry (hsts_store_t store,
   return result;
 }
 
-/* TODO check or remove parameter *filename */
 hsts_store_t
 hsts_store_open (const char *filename)
 {
-  hsts_store_t store;
-  char *home, *file;
+  hsts_store_t store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
 
-  store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
-
-//  /* TODO check --hsts-file */
-//  if ((home = home_dir ()))
-//    {
-//      file = aprintf ("%s/.wget-hsts", home);
-//      hsts_read_database (store, file);
-//    }
   hsts_read_database (store, filename);
 
   return store;
