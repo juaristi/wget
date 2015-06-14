@@ -32,6 +32,7 @@ as that of the covered work.  */
 #include <stdlib.h>
 #include <time.h>
 
+#include "wget.h"
 #include "hsts.h"
 #include "host.h" /* for is_valid_ip_address() */
 #include "init.h" /* for home_dir() */
@@ -528,12 +529,13 @@ hsts_store_open (const char *filename)
 
   store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
 
-  /* TODO check --hsts-file */
-  if ((home = home_dir ()))
-    {
-      file = aprintf ("%s/.wget-hsts", home);
-      hsts_read_database (store, file);
-    }
+//  /* TODO check --hsts-file */
+//  if ((home = home_dir ()))
+//    {
+//      file = aprintf ("%s/.wget-hsts", home);
+//      hsts_read_database (store, file);
+//    }
+  hsts_read_database (store, filename);
 
   return store;
 }
@@ -606,12 +608,53 @@ test_hsts_new_entry (void)
   return NULL;
 }
 
+static char*
+test_url_rewrite (hsts_store_t s, const char *url, int port, bool rewrite)
+{
+  bool result;
+  struct url u;
+
+  u.host = xstrdup (url);
+  u.port = port;
+  u.scheme = SCHEME_HTTP;
+
+  result = hsts_match (s, &u);
+
+  if (rewrite)
+    {
+      if (port == 80)
+	mu_assert("URL: port should've been rewritten to 443", u.port == 443);
+      else
+	mu_assert("URL: port should've been left intact", u.port == port);
+      mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
+      mu_assert("result should've been true", result == true);
+    }
+  else
+    {
+      mu_assert("URL: port should've been left intact", u.port == port);
+      mu_assert("URL: scheme should've been left intact", u.scheme == SCHEME_HTTP);
+      mu_assert("result should've been false", result == false);
+    }
+
+  xfree (u.host);
+  return NULL;
+}
+
+#define TEST_URL_RW(s, u, p) do { \
+    if (test_url_rewrite (s, u, p, true)) \
+      return test_url_rewrite (s, u, p, true); \
+  } while (0)
+
+#define TEST_URL_NORW(s, u, p) do { \
+    if (test_url_rewrite (s, u, p, false)) \
+      return test_url_rewrite (s, u, p, false); \
+  } while (0)
+
 const char*
 test_hsts_url_rewrite_superdomain (void)
 {
-  struct url u;
   hsts_store_t s;
-  bool created, result;
+  bool created;
 
   s = hsts_store_open ("foo");
   mu_assert("Could not open the HSTS store", s != NULL);
@@ -619,24 +662,8 @@ test_hsts_url_rewrite_superdomain (void)
   created = hsts_store_entry (s, SCHEME_HTTPS, "www.foo.com", 443, time(NULL) + 1234, true);
   mu_assert("A new entry should've been created", created == true);
 
-  u.host = xstrdup("www.foo.com");
-  u.port = 80;
-  u.scheme = SCHEME_HTTP;
-
-  result = hsts_match (s, &u);
-  mu_assert("URL: port should've been rewritten to 443", u.port == 443);
-  mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
-  mu_assert("result should have been true", result == true);
-
-  xfree(u.host);
-  u.host = xstrdup("bar.www.foo.com");
-  u.port = 80;
-  u.scheme = SCHEME_HTTP;
-
-  result = hsts_match (s, &u);
-  mu_assert("URL: port should've been rewritten to 443", u.port == 443);
-  mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
-  mu_assert("result should have been true", result == true);
+  TEST_URL_RW (s, "www.foo.com", 80);
+  TEST_URL_RW (s, "bar.www.foo.com", 80);
 
   hsts_store_close (s);
 
@@ -646,9 +673,8 @@ test_hsts_url_rewrite_superdomain (void)
 const char*
 test_hsts_url_rewrite_congruent (void)
 {
-  struct url u;
   hsts_store_t s;
-  bool created, result;
+  bool created;
 
   s = hsts_store_open("foo");
   mu_assert("Could not open the HSTS store", s != NULL);
@@ -656,26 +682,48 @@ test_hsts_url_rewrite_congruent (void)
   created = hsts_store_entry (s, SCHEME_HTTPS, "foo.com", 443, time(NULL) + 1234, false);
   mu_assert("A new entry should've been created", created == true);
 
-  u.host = xstrdup("foo.com");
-  u.port = 80;
-  u.scheme = SCHEME_HTTP;
-
-  result = hsts_match (s, &u);
-  mu_assert("URL: port should've been rewritten to 443", u.port == 443);
-  mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
-  mu_assert("result should have been true", result == true);
-
-  xfree(u.host);
-  u.host = xstrdup("www.foo.com");
-  u.port = 80;
-  u.scheme = SCHEME_HTTP;
-
-  result = hsts_match (s, &u);
-  mu_assert("URL: port should've been kept intact", u.port == 80);
-  mu_assert("URL: scheme should've been kept intact", u.scheme == SCHEME_HTTP);
-  mu_assert("result should have been false", result == false);
+  TEST_URL_RW (s, "foo.com", 80);
+  TEST_URL_NORW (s, "www.foo.com", 80);
 
   hsts_store_close (s);
+
+  return NULL;
+}
+
+const char*
+test_hsts_read_database (void)
+{
+  hsts_store_t store;
+  char *home = home_dir();
+  char *file = NULL;
+  FILE *fp = NULL;
+
+  if (home)
+    {
+      file = aprintf ("%s/.wget-hsts-testing", home);
+      fp = fopen (file, "w");
+      if (fp)
+	{
+	  fputs ("# dummy comment\n", fp);
+	  fputs (".foo.example.com\t1434224817\t123123123\n", fp);
+	  fputs ("bar.example.com\t1434224817\t456456456\n", fp);
+	  fputs ("test.example.com:8080\t1434224817\t789789789\n", fp);
+	  fclose (fp);
+
+	  store = hsts_store_open (file);
+
+	  TEST_URL_RW (store, "foo.example.com", 80);
+	  TEST_URL_RW (store, "www.foo.example.com", 80);
+	  TEST_URL_RW (store, "bar.example.com", 80);
+
+	  TEST_URL_NORW(store, "www.bar.example.com", 80);
+
+	  TEST_URL_RW (store, "test.example.com", 8080);
+
+	  hsts_store_close (store);
+	  unlink (file);
+	}
+    }
 
   return NULL;
 }
