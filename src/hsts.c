@@ -65,21 +65,11 @@ static unsigned long
 hsts_hash_func (const void *key)
 {
   struct hsts_kh *k = (struct hsts_kh *) key;
-  const char *h = k->host;
-  unsigned int hash = c_tolower (*h);
-  char p[6];
-  int p_len = 0, i = 0;
+  const char *h = NULL;
+  unsigned int hash = k->explicit_port;
 
-  p_len = snprintf (p, 6, "%d", k->explicit_port);
-
-  if (hash)
-    {
-      for (h += 1; *h != '\0'; h++)
-	hash = (hash << 5) - hash + c_tolower (*h);
-
-      for (i = 0; i < p_len; i++)
-	hash = (hash << 5) - hash + p[i];
-    }
+  for (h = k->host; *h; h++)
+    hash = hash * 31 + c_tolower (*h);
 
   return hash;
 }
@@ -414,12 +404,12 @@ hsts_read_database (hsts_store_t store, const char *file)
 /* HSTS API */
 
 /*
- * Changes the given URLs according to the HSTS policy.
- *
- * If there's no host in the store that either congruently
- * or not, matches the given URL, no changes are made.
- * Returns true if the URL was changed, or false
- * if it was left intact.
+   Changes the given URLs according to the HSTS policy.
+
+   If there's no host in the store that either congruently
+   or not, matches the given URL, no changes are made.
+   Returns true if the URL was changed, or false
+   if it was left intact.
  */
 bool
 hsts_match (hsts_store_t store, struct url *u)
@@ -455,28 +445,27 @@ hsts_match (hsts_store_t store, struct url *u)
 }
 
 /*
- * Add a new HSTS Known Host to the HSTS store.
- *
- * If the host already exists, its information is updated,
- * or it'll be removed from the store if max_age is zero.
+   Add a new HSTS Known Host to the HSTS store.
+
+   If the host already exists, its information is updated,
+   or it'll be removed from the store if max_age is zero.
 
    Bear in mind that the store is kept in memory, and will not
    be written to disk until hsts_store_save is called.
    This function regrows the in-memory HSTS store if necessary.
 
    Currently, for a host to be taken into consideration,
- * two conditions have to be met:
- *   - Connection must be through a secure channel (HTTPS).
- *   - The host must not be an IPv4 or IPv6 address.
- *
- * The RFC 6797 states that hosts that match IPv4 or IPv6 format
- * should be discarded at URI rewrite time. But we short-circuit
- * that check here, since there's no point in storing a host that
- * will never be matched.
- *
- * Returns true if a new entry was actually created, or false
- * if an existing entry was updated/deleted.
- */
+   two conditions have to be met:
+     - Connection must be through a secure channel (HTTPS).
+     - The host must not be an IPv4 or IPv6 address.
+
+   The RFC 6797 states that hosts that match IPv4 or IPv6 format
+   should be discarded at URI rewrite time. But we short-circuit
+   that check here, since there's no point in storing a host that
+   will never be matched.
+
+   Returns true if a new entry was actually created, or false
+   if an existing entry was updated/deleted. */
 bool
 hsts_store_entry (hsts_store_t store,
 		  enum url_scheme scheme, const char *host, int port,
