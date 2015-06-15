@@ -215,8 +215,6 @@ hsts_new_entry_internal (hsts_store_t store,
     goto bail;
 
   /* Now store the new entry */
-  /* TODO remove this printf() call */
-  printf ("[DEBUG HSTS] Storing %s:%d (created=%d, max_age=%d, incl_sd=%s)\n", host, port, created, max_age, (include_subdomains ? "true" : "false"));
   hash_table_put (store, kh, khi);
   success = true;
 
@@ -400,12 +398,13 @@ end:
   return result;
 }
 
-static void
+static bool
 hsts_read_database (hsts_store_t store, const char *file)
 {
   FILE *fp = NULL;
   char *line = NULL;
   size_t len = 0;
+  bool result = false;
 
   char *host = NULL;
   int port = 0;
@@ -426,7 +425,10 @@ hsts_read_database (hsts_store_t store, const char *file)
 	  xfree (line);
 	}
       fclose (fp);
+      result = true;
     }
+
+  return result;
 }
 
 /* HSTS API */
@@ -547,11 +549,16 @@ hsts_store_entry (hsts_store_t store,
 }
 
 hsts_store_t
-hsts_store_open (const char *filename)
+hsts_store_open (const char *filename, bool ignore_errors)
 {
   hsts_store_t store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
 
-  hsts_read_database (store, filename);
+  if (!hsts_read_database (store, filename) && !ignore_errors)
+    {
+      /* abort! */
+      hsts_store_close (store);
+      store = NULL;
+    }
 
   return store;
 }
@@ -586,7 +593,7 @@ test_hsts_new_entry (void)
   enum hsts_kh_match match = NO_MATCH;
   struct hsts_kh_info *khi = NULL;
 
-  hsts_store_t s = hsts_store_open ("foo");
+  hsts_store_t s = hsts_store_open ("foo", true);
   mu_assert("Could not open the HSTS store. This could be due to lack of memory.", s != NULL);
 
   bool created = hsts_store_entry (s, SCHEME_HTTP, "www.foo.com", 80, 1234, true);
@@ -672,7 +679,7 @@ test_hsts_url_rewrite_superdomain (void)
   hsts_store_t s;
   bool created;
 
-  s = hsts_store_open ("foo");
+  s = hsts_store_open ("foo", true);
   mu_assert("Could not open the HSTS store", s != NULL);
 
   created = hsts_store_entry (s, SCHEME_HTTPS, "www.foo.com", 443, time(NULL) + 1234, true);
@@ -692,7 +699,7 @@ test_hsts_url_rewrite_congruent (void)
   hsts_store_t s;
   bool created;
 
-  s = hsts_store_open("foo");
+  s = hsts_store_open("foo", true);
   mu_assert("Could not open the HSTS store", s != NULL);
 
   created = hsts_store_entry (s, SCHEME_HTTPS, "foo.com", 443, time(NULL) + 1234, false);
@@ -726,7 +733,7 @@ test_hsts_read_database (void)
 	  fputs ("test.example.com:8080\t1434224817\t789789789\n", fp);
 	  fclose (fp);
 
-	  store = hsts_store_open (file);
+	  store = hsts_store_open (file, false);
 
 	  TEST_URL_RW (store, "foo.example.com", 80);
 	  TEST_URL_RW (store, "www.foo.example.com", 80);

@@ -2991,7 +2991,11 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
     {
       /* process strict transport security */
       if (hsts_store_entry (hsts_store, u->scheme, u->host, u->port, max_age, include_subdomains))
-	DEBUGP(("Added new HSTS host: %s:%d\n", u->host, u->port));
+	DEBUGP(("Added new HSTS host: %s:%d (max-age: %d, includeSubdomains: %s)\n",
+	    u->host,
+	    u->port,
+	    max_age,
+	    (include_subdomains ? "true" : "false")));
     }
 
   type = resp_header_strdup (resp, "Content-Type");

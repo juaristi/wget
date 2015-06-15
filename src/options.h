@@ -292,6 +292,7 @@ struct options
   bool report_bps;              /*Output bandwidth in bits format*/
 
   bool hsts;
+  char *hsts_file;
 };
 
 extern struct options opt;

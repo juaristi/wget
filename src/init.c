@@ -195,6 +195,7 @@ static const struct {
   { "glob",             &opt.ftp_glob,          cmd_boolean },
   { "header",           NULL,                   cmd_spec_header },
   { "hsts",		&opt.hsts,		cmd_boolean },
+  { "hsts-file",        &opt.hsts_file,         cmd_file },
   { "htmlextension",    &opt.adjust_extension,  cmd_boolean }, /* deprecated */
   { "htmlify",          NULL,                   cmd_spec_htmlify },
   { "httpkeepalive",    &opt.http_keep_alive,   cmd_boolean },

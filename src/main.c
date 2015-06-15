@@ -226,6 +226,7 @@ static struct cmdline_option option_data[] =
     { "help", 'h', OPT_FUNCALL, (void *)print_help, no_argument },
     { "host-directories", 0, OPT_BOOLEAN, "addhostdir", -1 },
     { "hsts", 0, OPT_BOOLEAN, "hsts", -1},
+    { "hsts-file", 0, OPT_VALUE, "hsts-file", -1 },
     { "html-extension", 'E', OPT_BOOLEAN, "adjustextension", -1 }, /* deprecated */
     { "htmlify", 0, OPT_BOOLEAN, "htmlify", -1 },
     { "http-keep-alive", 0, OPT_BOOLEAN, "httpkeepalive", -1 },
@@ -1016,6 +1017,40 @@ There is NO WARRANTY, to the extent permitted by law.\n"), stdout) < 0)
     exit (WGET_EXIT_IO_FAIL);
 
   exit (WGET_EXIT_SUCCESS);
+}
+
+static void
+open_hsts_if_needed (char **urls)
+{
+  char *home = NULL, *filename = NULL;
+
+  hsts_store = NULL;
+
+  if (opt.hsts)
+    {
+      if (opt.hsts_file)
+	filename = opt.hsts_file;
+      else
+	{
+	  home = home_dir ();
+	  if (home)
+	    filename = aprintf ("%s/.wget-hsts", home);
+	}
+
+      if (filename)
+	hsts_store = hsts_store_open (filename, !opt.hsts_file);
+
+      if (!hsts_store)
+	{
+	  if (!filename)
+	    logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store. HSTS will be disabled.\n");
+	  else
+	    logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store at '%s'. "
+		       "HSTS will be disabled.\n",
+		       filename);
+	}
+      /* from here on, it's enough to check hsts_store alone */
+    }
 }
 
 const char *program_name; /* Needed by lib/error.c. */

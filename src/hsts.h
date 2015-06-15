@@ -38,7 +38,7 @@ as that of the covered work.  */
 
 typedef struct hash_table *hsts_store_t;
 
-hsts_store_t hsts_store_open (const char *);
+hsts_store_t hsts_store_open (const char *, bool);
 
 void hsts_store_save (hsts_store_t, const char *);
 void hsts_store_close (hsts_store_t);
@@ -47,4 +47,6 @@ bool hsts_store_entry (hsts_store_t,
 		       enum url_scheme, const char *, int,
 		       time_t, bool);
 bool hsts_match (hsts_store_t, struct url *);
+
+hsts_store_t hsts_store;
 #endif
