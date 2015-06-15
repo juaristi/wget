@@ -38,7 +38,7 @@ as that of the covered work.  */
 
 typedef struct hash_table *hsts_store_t;
 
-hsts_store_t hsts_store_open (const char *, bool);
+hsts_store_t hsts_store_open (const char *);
 
 void hsts_store_save (hsts_store_t, const char *);
 void hsts_store_close (hsts_store_t);

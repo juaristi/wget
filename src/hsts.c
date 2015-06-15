@@ -551,11 +551,11 @@ hsts_store_entry (hsts_store_t store,
 }
 
 hsts_store_t
-hsts_store_open (const char *filename, bool ignore_errors)
+hsts_store_open (const char *filename)
 {
   hsts_store_t store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
 
-  if (!hsts_read_database (store, filename) && !ignore_errors)
+  if (!hsts_read_database (store, filename))
     {
       /* abort! */
       hsts_store_close (store);
@@ -565,7 +565,7 @@ hsts_store_open (const char *filename, bool ignore_errors)
   return store;
 }
 
-/* TODO next iteration */
+/* TODO reload file in case multiple instances of Wget are running */
 void
 hsts_store_save (hsts_store_t store, const char *filename)
 {
