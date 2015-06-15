@@ -29,9 +29,6 @@ Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
 
-#include <stdlib.h>
-#include <time.h>
-
 #include "wget.h"
 #include "hsts.h"
 #include "host.h" /* for is_valid_ip_address() */
@@ -41,6 +38,9 @@ as that of the covered work.  */
 #include "test.h"
 #endif
 #include "c-ctype.h"
+
+#include <stdlib.h>
+#include <time.h>
 
 struct hsts_kh {
   char *host;
@@ -192,7 +192,7 @@ hsts_new_entry_internal (hsts_store_t store,
   struct hsts_kh *kh = xnew (struct hsts_kh);
   struct hsts_kh_info *khi = xnew0 (struct hsts_kh_info);
   bool success = false;
-  int i = 0;
+  unsigned int i = 0;
 
   kh->host = xstrdup (host);
   kh->explicit_port = MAKE_EXPLICIT_PORT (port);
