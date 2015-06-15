@@ -2998,6 +2998,12 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
 		u->port,
 		(unsigned int) max_age,
 		(include_subdomains ? "true" : "false")));
+	  else
+	    DEBUGP(("Updated HSTS host: %s:%u (max-age: %u, includeSubdomains: %s)\n",
+		u->host,
+		u->port,
+		(unsigned int) max_age,
+		(include_subdomains ? "true" : "false")));
 	}
     }
 

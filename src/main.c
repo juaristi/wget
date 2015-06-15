@@ -141,6 +141,7 @@ static char*
 get_hsts_database (void)
 {
   char *home = NULL, *filename = NULL;
+  FILE *fp = NULL;
 
   if (opt.hsts_file)
     filename = opt.hsts_file;
@@ -148,7 +149,23 @@ get_hsts_database (void)
     {
       home = home_dir ();
       if (home)
-	filename = aprintf ("%s/.wget-hsts", home);
+	{
+	  filename = aprintf ("%s/.wget-hsts", home);
+
+	  /* hsts_store_open() expects the file to exist, so create it if it doesn't */
+	  if (!file_exists_p (filename))
+	    {
+	      fp = fopen (filename, "w");
+	      if (fp)
+		fclose (fp);
+	      else
+		{
+		  /* We were unable to create the file. Abort! */
+		  xfree (filename);
+		  filename = NULL;
+		}
+	    }
+	}
     }
 
   return filename;
@@ -164,7 +181,7 @@ load_hsts (void)
       filename = get_hsts_database ();
 
       if (filename)
-	hsts_store = hsts_store_open (filename, !opt.hsts_file);
+	hsts_store = hsts_store_open (filename);
 
       if (!hsts_store)
       {
@@ -174,10 +191,9 @@ load_hsts (void)
 	  logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store at '%s'. "
 		     "HSTS will be disabled.\n",
 		     filename);
-	/* from here on, it's enough to check hsts_store alone */
       }
 
-      if (!opt.hsts_file)
+      if (!opt.hsts_file && filename)
 	xfree (filename);
     }
 }
@@ -194,7 +210,7 @@ save_hsts (void)
       hsts_store_save (hsts_store, filename);
       hsts_store_close (hsts_store);
 
-      if (!opt.hsts_file)
+      if (!opt.hsts_file && filename)
 	xfree (filename);
     }
 }
