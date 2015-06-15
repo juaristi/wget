@@ -48,5 +48,6 @@ bool hsts_store_entry (hsts_store_t,
 		       time_t, bool);
 bool hsts_match (hsts_store_t, struct url *);
 
+/* make the HSTS store global */
 hsts_store_t hsts_store;
 #endif

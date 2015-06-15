@@ -73,6 +73,8 @@ enum hsts_kh_match {
       *p = v; \
   } while (0)
 
+#define SEPARATOR '\t'
+
 /* Hashing and comparison functions for the hash table */
 
 static unsigned long
@@ -567,6 +569,62 @@ hsts_store_open (const char *filename, bool ignore_errors)
 void
 hsts_store_save (hsts_store_t store, const char *filename)
 {
+  int written = 0;
+  char *tmp = NULL;
+  FILE *fp = NULL;
+  hash_table_iterator it;
+  struct hsts_kh *kh = NULL;
+  struct hsts_kh_info *khi = NULL;
+
+  fp = fopen (filename, "w");
+  if (fp)
+    {
+      /* Print preliminary comments. We don't care if any of these fail. */
+      fputs ("# HSTS 1.0 Known Hosts database for GNU Wget.\n", fp);
+      fputs ("# Edit at your own risk.\n", fp);
+
+      /* Now cycle through the HSTS store in memory and dump the entries */
+      for (hash_table_iterate (store, &it); hash_table_iter_next (&it);)
+	{
+	  kh = (struct hsts_kh *) it.key;
+	  khi = (struct hsts_kh_info *) it.value;
+
+	  /* print hostname */
+	  if (khi->include_subdomains)
+	    written |= fputc ('.', fp);
+
+	  written |= fputs (kh->host, fp);
+
+	  if (kh->explicit_port != 0)
+	    {
+	      tmp = aprintf ("%i", kh->explicit_port);
+	      if (tmp)
+		{
+		  written |= fputc (':', fp);
+		  written |= fputs (tmp, fp);
+		}
+	      free (tmp);
+	    }
+
+	  written |= fputc (SEPARATOR, fp);
+
+	  /* print creation time */
+	  tmp = aprintf ("%u", khi->created);
+	  written |= fputs (tmp, fp);
+	  free (tmp);
+
+	  written |= fputc (SEPARATOR, fp);
+
+	  /* print max-age */
+	  tmp = aprintf ("%u", khi->max_age);
+	  written |= fputs (tmp, fp);
+	  free (tmp);
+
+	  written |= fputc ('\n', fp);
+	}
+
+      fclose (fp);
+    }
   return;
 }
 

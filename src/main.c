@@ -54,6 +54,7 @@ as that of the covered work.  */
 #include "convert.h"
 #include "spider.h"
 #include "http.h"               /* for save_cookies */
+#include "hsts.h"		/* for initializing hsts_store to NULL */
 #include "ptimer.h"
 #include "warc.h"
 #include "version.h"
@@ -134,6 +135,68 @@ i18n_initialize (void)
   bindtextdomain ("wget", LOCALEDIR);
   textdomain ("wget");
 #endif /* ENABLE_NLS */
+}
+
+static char*
+get_hsts_database (void)
+{
+  char *home = NULL, *filename = NULL;
+
+  if (opt.hsts_file)
+    filename = opt.hsts_file;
+  else
+    {
+      home = home_dir ();
+      if (home)
+	filename = aprintf ("%s/.wget-hsts", home);
+    }
+
+  return filename;
+}
+
+static void
+load_hsts (void)
+{
+  char *filename = NULL;
+
+  if (!hsts_store)
+    {
+      filename = get_hsts_database ();
+
+      if (filename)
+	hsts_store = hsts_store_open (filename, !opt.hsts_file);
+
+      if (!hsts_store)
+      {
+	if (!filename)
+	  logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store. HSTS will be disabled.\n");
+	else
+	  logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store at '%s'. "
+		     "HSTS will be disabled.\n",
+		     filename);
+	/* from here on, it's enough to check hsts_store alone */
+      }
+
+      if (!opt.hsts_file)
+	xfree (filename);
+    }
+}
+
+static void
+save_hsts (void)
+{
+  char *filename = NULL;
+
+  if (hsts_store)
+    {
+      filename = get_hsts_database ();
+
+      hsts_store_save (hsts_store, filename);
+      hsts_store_close (hsts_store);
+
+      if (!opt.hsts_file)
+	xfree (filename);
+    }
 }
 
 /* Definition of command-line options. */
@@ -1019,40 +1082,6 @@ There is NO WARRANTY, to the extent permitted by law.\n"), stdout) < 0)
   exit (WGET_EXIT_SUCCESS);
 }
 
-static void
-open_hsts_if_needed (char **urls)
-{
-  char *home = NULL, *filename = NULL;
-
-  hsts_store = NULL;
-
-  if (opt.hsts)
-    {
-      if (opt.hsts_file)
-	filename = opt.hsts_file;
-      else
-	{
-	  home = home_dir ();
-	  if (home)
-	    filename = aprintf ("%s/.wget-hsts", home);
-	}
-
-      if (filename)
-	hsts_store = hsts_store_open (filename, !opt.hsts_file);
-
-      if (!hsts_store)
-	{
-	  if (!filename)
-	    logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store. HSTS will be disabled.\n");
-	  else
-	    logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store at '%s'. "
-		       "HSTS will be disabled.\n",
-		       filename);
-	}
-      /* from here on, it's enough to check hsts_store alone */
-    }
-}
-
 const char *program_name; /* Needed by lib/error.c. */
 const char *program_argstring; /* Needed by wget_warc.c. */
 
@@ -1698,6 +1727,16 @@ outputting to a regular file.\n"));
   signal (SIGWINCH, progress_handle_sigwinch);
 #endif
 
+  hsts_store = NULL;
+
+  /* Load the HSTS database.
+     Maybe all the URLs are FTP(S), in which case HSTS would not be needed,
+     but this is the best place to do it, and it shouldn't be a critical
+     performance hit.
+   */
+  if (opt.hsts)
+    load_hsts ();
+
   /* Retrieve the URLs from argument list.  */
   for (t = url; *t; t++)
     {
@@ -1735,10 +1774,10 @@ outputting to a regular file.\n"));
               opt.follow_ftp = old_follow_ftp;
             }
           else
-          {
-            retrieve_url (url_parsed, *t, &filename, &redirected_URL, NULL,
-                          &dt, opt.recursive, iri, true);
-          }
+	    {
+	      retrieve_url (url_parsed, *t, &filename, &redirected_URL, NULL,
+			    &dt, opt.recursive, iri, true);
+	    }
 
           if (opt.delete_after && filename != NULL && file_exists_p (filename))
             {
@@ -1804,6 +1843,9 @@ outputting to a regular file.\n"));
 
   if (opt.cookies_output)
     save_cookies ();
+
+  if (opt.hsts && hsts_store)
+    save_hsts ();
 
   if (opt.convert_links && !opt.delete_after)
     convert_all_links ();

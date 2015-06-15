@@ -2510,7 +2510,7 @@ set_content_type (int *dt, const char *type)
    server, and u->url will be requested.  */
 static uerr_t
 gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
-         struct iri *iri, int count, hsts_store_t hsts_store)
+         struct iri *iri, int count)
 {
   struct request *req = NULL;
 
@@ -2986,16 +2986,19 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   else
     hs->error = xstrdup (message);
 
-  hsts_params = resp_header_strdup (resp, "Strict-Transport-Security");
-  if (parse_strict_transport_security (hsts_params, &max_age, &include_subdomains))
+  if (opt.hsts && hsts_store)
     {
-      /* process strict transport security */
-      if (hsts_store_entry (hsts_store, u->scheme, u->host, u->port, max_age, include_subdomains))
-	DEBUGP(("Added new HSTS host: %s:%d (max-age: %d, includeSubdomains: %s)\n",
-	    u->host,
-	    u->port,
-	    max_age,
-	    (include_subdomains ? "true" : "false")));
+      hsts_params = resp_header_strdup (resp, "Strict-Transport-Security");
+      if (parse_strict_transport_security (hsts_params, &max_age, &include_subdomains))
+	{
+	  /* process strict transport security */
+	  if (hsts_store_entry (hsts_store, u->scheme, u->host, u->port, max_age, include_subdomains))
+	    DEBUGP(("Added new HSTS host: %s:%u (max-age: %u, includeSubdomains: %s)\n",
+		u->host,
+		u->port,
+		(unsigned int) max_age,
+		(include_subdomains ? "true" : "false")));
+	}
     }
 
   type = resp_header_strdup (resp, "Content-Type");
@@ -3358,7 +3361,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
 uerr_t
 http_loop (struct url *u, struct url *original_url, char **newloc,
            char **local_file, const char *referer, int *dt, struct url *proxy,
-           struct iri *iri, hsts_store_t hsts_store)
+           struct iri *iri)
 {
   int count;
   bool got_head = false;         /* used for time-stamping and filename detection */
@@ -3545,7 +3548,7 @@ Spider mode enabled. Check if remote file exists.\n"));
         *dt &= ~SEND_NOCACHE;
 
       /* Try fetching the document, or at least its head.  */
-      err = gethttp (u, &hstat, dt, proxy, iri, count, hsts_store);
+      err = gethttp (u, &hstat, dt, proxy, iri, count);
 
       /* Time?  */
       tms = datetime_str (time (NULL));

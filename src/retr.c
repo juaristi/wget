@@ -800,13 +800,13 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 #endif
       || (proxy_url && proxy_url->scheme == SCHEME_HTTP))
     {
-      if (hsts_store)
+      if (opt.hsts && hsts_store)
 	{
 	  if (hsts_match (hsts_store, u))
 	    DEBUGP(("URL transformed to HTTPS per HSTS policy"));
 	}
       result = http_loop (u, orig_parsed, &mynewloc, &local_file, refurl, dt,
-                          proxy_url, iri, hsts_store);
+                          proxy_url, iri);
     }
   else if (u->scheme == SCHEME_FTP)
     {
@@ -994,9 +994,6 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 bail:
   if (register_status)
     inform_exit_status (result);
-
-  if (hsts_store)
-    hsts_store_close (hsts_store);
 
   return result;
 }
