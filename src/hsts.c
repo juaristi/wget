@@ -68,9 +68,13 @@ enum hsts_kh_match {
 #define CHECK_EXPLICIT_PORT(p1, p2) (p1 == 0 || p1 == p2)
 #define MAKE_EXPLICIT_PORT(p) (p == DEFAULT_SSL_PORT ? 0 : p)
 
-#define SETPARAM(p, v) do { \
-    if (p != NULL) \
-      *p = v; \
+#define SETPARAM(p, v) do { 	\
+    if (p != NULL) 		\
+      *p = v; 			\
+  } while (0)
+#define COPYPARAM(dst, src, t) do {	\
+    if (dst != NULL)			\
+      memcpy (dst, src, sizeof (t));	\
   } while (0)
 
 #define SEPARATOR '\t'
@@ -152,8 +156,7 @@ hsts_find_entry (hsts_store_t store,
 	{
 	  khi = (struct hsts_kh_info *) it.value;
 	  SETPARAM (match_type, CONGRUENT_MATCH);
-	  if (kh != NULL)
-	    memcpy (kh, k, sizeof (struct hsts_kh));
+	  COPYPARAM (kh, k, struct hsts_kh);
 	}
     }
 
@@ -170,14 +173,12 @@ hsts_find_entry (hsts_store_t store,
 	{
 	  khi = (struct hsts_kh_info *) it.value;
 	  SETPARAM (match_type, SUPERDOMAIN_MATCH);
-	  if (kh != NULL)
-	    memcpy (kh, k, sizeof (struct hsts_kh));
+	  COPYPARAM (kh, k, struct hsts_kh);
 	}
     }
 
   if (khi == NULL)
-    if (match_type != NULL)
-      *match_type = NO_MATCH;
+    SETPARAM (match_type, NO_MATCH);
 
 end:
   return khi;
@@ -277,18 +278,13 @@ hsts_parse_line (const char *line,
   } state = INITIAL;
 
   const char *p = NULL;
-  const char *host_s = NULL,
-      *host_e = NULL,
-      *port_s = NULL,
-      *port_e = NULL,
-      *created_s = NULL,
-      *created_e = NULL,
-      *max_age_s = NULL,
-      *max_age_e = NULL;
 
-  const char *str_port = NULL,
-      *str_created = NULL,
-      *str_max_age = NULL;
+  const char *host_s = NULL, *host_e = NULL;
+  const char *port_s = NULL, *port_e = NULL;
+  const char *created_s = NULL, *created_e = NULL;
+  const char *max_age_s = NULL, *max_age_e = NULL;
+
+  const char *str_port = NULL, *str_created = NULL, *str_max_age = NULL;
 
   for (p = line; *p && max_age_e == NULL && result == true; p++)
     {
@@ -422,7 +418,7 @@ hsts_read_database (hsts_store_t store, const char *file)
 	    {
 	      if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains) &&
 		  host && created && max_age)
-		hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, false);
+		hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, true);
 	    }
 	  xfree (line);
 	}
@@ -584,7 +580,7 @@ hsts_store_save (hsts_store_t store, const char *filename)
       fputs ("# Edit at your own risk.\n", fp);
 
       /* Now cycle through the HSTS store in memory and dump the entries */
-      for (hash_table_iterate (store, &it); hash_table_iter_next (&it);)
+      for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (written >= 0);)
 	{
 	  kh = (struct hsts_kh *) it.key;
 	  khi = (struct hsts_kh_info *) it.value;
@@ -609,14 +605,14 @@ hsts_store_save (hsts_store_t store, const char *filename)
 	  written |= fputc (SEPARATOR, fp);
 
 	  /* print creation time */
-	  tmp = aprintf ("%u", khi->created);
+	  tmp = aprintf ("%lu", khi->created);
 	  written |= fputs (tmp, fp);
 	  free (tmp);
 
 	  written |= fputc (SEPARATOR, fp);
 
 	  /* print max-age */
-	  tmp = aprintf ("%u", khi->max_age);
+	  tmp = aprintf ("%lu", khi->max_age);
 	  written |= fputs (tmp, fp);
 	  free (tmp);
 
@@ -645,13 +641,78 @@ hsts_store_close (hsts_store_t store)
 }
 
 #ifdef TESTING
+#define TEST_URL_RW(s, u, p) do { \
+    if (test_url_rewrite (s, u, p, true)) \
+      return test_url_rewrite (s, u, p, true); \
+  } while (0)
+
+#define TEST_URL_NORW(s, u, p) do { \
+    if (test_url_rewrite (s, u, p, false)) \
+      return test_url_rewrite (s, u, p, false); \
+  } while (0)
+
+static hsts_store_t
+open_hsts_test_store ()
+{
+  char *home = NULL, *filename = NULL;
+  FILE *fp = NULL;
+  hsts_store_t store = NULL;
+
+  home = home_dir ();
+  if (home)
+    {
+      filename = aprintf ("%s/.wget-hsts-test", home);
+      fp = fopen (filename, "w");
+      if (fp)
+	{
+	  fclose (fp);
+	  store = hsts_store_open (filename);
+	}
+      xfree (filename);
+    }
+
+  return store;
+}
+
+static char*
+test_url_rewrite (hsts_store_t s, const char *url, int port, bool rewrite)
+{
+  bool result;
+  struct url u;
+
+  u.host = xstrdup (url);
+  u.port = port;
+  u.scheme = SCHEME_HTTP;
+
+  result = hsts_match (s, &u);
+
+  if (rewrite)
+    {
+      if (port == 80)
+	mu_assert("URL: port should've been rewritten to 443", u.port == 443);
+      else
+	mu_assert("URL: port should've been left intact", u.port == port);
+      mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
+      mu_assert("result should've been true", result == true);
+    }
+  else
+    {
+      mu_assert("URL: port should've been left intact", u.port == port);
+      mu_assert("URL: scheme should've been left intact", u.scheme == SCHEME_HTTP);
+      mu_assert("result should've been false", result == false);
+    }
+
+  xfree (u.host);
+  return NULL;
+}
+
 const char *
 test_hsts_new_entry (void)
 {
   enum hsts_kh_match match = NO_MATCH;
   struct hsts_kh_info *khi = NULL;
 
-  hsts_store_t s = hsts_store_open ("foo", true);
+  hsts_store_t s = open_hsts_test_store ();
   mu_assert("Could not open the HSTS store. This could be due to lack of memory.", s != NULL);
 
   bool created = hsts_store_entry (s, SCHEME_HTTP, "www.foo.com", 80, 1234, true);
@@ -689,55 +750,13 @@ test_hsts_new_entry (void)
   return NULL;
 }
 
-static char*
-test_url_rewrite (hsts_store_t s, const char *url, int port, bool rewrite)
-{
-  bool result;
-  struct url u;
-
-  u.host = xstrdup (url);
-  u.port = port;
-  u.scheme = SCHEME_HTTP;
-
-  result = hsts_match (s, &u);
-
-  if (rewrite)
-    {
-      if (port == 80)
-	mu_assert("URL: port should've been rewritten to 443", u.port == 443);
-      else
-	mu_assert("URL: port should've been left intact", u.port == port);
-      mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
-      mu_assert("result should've been true", result == true);
-    }
-  else
-    {
-      mu_assert("URL: port should've been left intact", u.port == port);
-      mu_assert("URL: scheme should've been left intact", u.scheme == SCHEME_HTTP);
-      mu_assert("result should've been false", result == false);
-    }
-
-  xfree (u.host);
-  return NULL;
-}
-
-#define TEST_URL_RW(s, u, p) do { \
-    if (test_url_rewrite (s, u, p, true)) \
-      return test_url_rewrite (s, u, p, true); \
-  } while (0)
-
-#define TEST_URL_NORW(s, u, p) do { \
-    if (test_url_rewrite (s, u, p, false)) \
-      return test_url_rewrite (s, u, p, false); \
-  } while (0)
-
 const char*
 test_hsts_url_rewrite_superdomain (void)
 {
   hsts_store_t s;
   bool created;
 
-  s = hsts_store_open ("foo", true);
+  s = open_hsts_test_store ();
   mu_assert("Could not open the HSTS store", s != NULL);
 
   created = hsts_store_entry (s, SCHEME_HTTPS, "www.foo.com", 443, time(NULL) + 1234, true);
@@ -757,7 +776,7 @@ test_hsts_url_rewrite_congruent (void)
   hsts_store_t s;
   bool created;
 
-  s = hsts_store_open("foo", true);
+  s = open_hsts_test_store ();
   mu_assert("Could not open the HSTS store", s != NULL);
 
   created = hsts_store_entry (s, SCHEME_HTTPS, "foo.com", 443, time(NULL) + 1234, false);
@@ -791,7 +810,7 @@ test_hsts_read_database (void)
 	  fputs ("test.example.com:8080\t1434224817\t789789789\n", fp);
 	  fclose (fp);
 
-	  store = hsts_store_open (file, false);
+	  store = hsts_store_open (file);
 
 	  TEST_URL_RW (store, "foo.example.com", 80);
 	  TEST_URL_RW (store, "www.foo.example.com", 80);
