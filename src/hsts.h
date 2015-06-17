@@ -36,7 +36,11 @@ as that of the covered work.  */
 #include "url.h"
 #include "hash.h"
 
-typedef struct hash_table *hsts_store_t;
+struct hsts_store {
+  struct hash_table *store;
+  time_t last_mtime;
+};
+typedef struct hsts_store *hsts_store_t;
 
 hsts_store_t hsts_store_open (const char *);
 

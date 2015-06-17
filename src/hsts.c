@@ -41,6 +41,7 @@ as that of the covered work.  */
 
 #include <stdlib.h>
 #include <time.h>
+#include <sys/stat.h>
 
 struct hsts_kh {
   char *host;
@@ -149,7 +150,7 @@ hsts_find_entry (hsts_store_t store,
   /* TODO Refactor: avoid code repetition here. */
 
   /* Look for congruent matches first */
-  for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
+  for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (khi == NULL);)
     {
       k = (struct hsts_kh *) it.key;
       if (hsts_congruent_match (host, k->host) && CHECK_EXPLICIT_PORT (k->explicit_port, port))
@@ -166,7 +167,7 @@ hsts_find_entry (hsts_store_t store,
   /* If no congruent matches were found,
    * look for superdomain matches.
    */
-  for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (khi == NULL);)
+  for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (khi == NULL);)
     {
       k = (struct hsts_kh *) it.key;
       if (hsts_superdomain_match (host, k->host) && CHECK_EXPLICIT_PORT (k->explicit_port, port))
@@ -214,11 +215,11 @@ hsts_new_entry_internal (hsts_store_t store,
   if (check_expired && ((khi->created + khi->max_age) < khi->created))
     goto bail;
 
-  if (check_duplicates && hash_table_contains (store, kh))
+  if (check_duplicates && hash_table_contains (store->store, kh))
     goto bail;
 
   /* Now store the new entry */
-  hash_table_put (store, kh, khi);
+  hash_table_put (store->store, kh, khi);
   success = true;
 
 bail:
@@ -238,7 +239,7 @@ bail:
    This function assumes that check has already been done by the caller.
  */
 static bool
-hsts_new_entry (hsts_store_t store,
+hsts_add_entry (hsts_store_t store,
 		const char *host, int port,
 		time_t max_age, bool include_subdomains)
 {
@@ -250,11 +251,45 @@ hsts_new_entry (hsts_store_t store,
       hsts_new_entry_internal (store, host, port, t, max_age, include_subdomains, true, false));
 }
 
+/* Creates a new entry, unless an identical one already exists. */
+static bool
+hsts_new_entry (hsts_store_t store,
+		const char *host, int port,
+		time_t created, time_t max_age,
+		bool include_subdomains)
+{
+  return hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, true);
+}
+
 static void
 hsts_remove_entry (hsts_store_t store, struct hsts_kh *kh)
 {
-  if (hash_table_remove (store, kh))
+  if (hash_table_remove (store->store, kh))
     xfree (kh->host);
+}
+
+static bool
+hsts_store_merge (hsts_store_t store,
+		  const char *host, int port,
+		  time_t created, time_t max_age,
+		  bool include_subdomains)
+{
+  enum hsts_kh_match match_type = NO_MATCH;
+  struct hsts_kh_info *khi = NULL;
+  bool success = false;
+
+  khi = hsts_find_entry (store,host, port, &match_type, NULL);
+  if (khi && match_type == CONGRUENT_MATCH && created > khi->created)
+    {
+      /* update the entry with the new info */
+      khi->created = created;
+      khi->max_age = max_age;
+      khi->include_subdomains = include_subdomains;
+
+      success = true;
+    }
+
+  return success;
 }
 
 static bool
@@ -397,17 +432,21 @@ end:
 }
 
 static bool
-hsts_read_database (hsts_store_t store, const char *file)
+hsts_read_database (hsts_store_t store, const char *file, bool merge_with_existing_entries)
 {
   FILE *fp = NULL;
   char *line = NULL;
   size_t len = 0;
   bool result = false;
+  struct stat st;
+  bool (*func)(hsts_store_t, const char *, int, time_t, time_t, bool);
 
   char *host = NULL;
   int port = 0;
   time_t created = 0, max_age = 0;
   bool include_subdomains = false;
+
+  func = (merge_with_existing_entries ? hsts_store_merge : hsts_new_entry);
 
   fp = fopen (file, "r");
   if (fp)
@@ -418,7 +457,7 @@ hsts_read_database (hsts_store_t store, const char *file)
 	    {
 	      if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains) &&
 		  host && created && max_age)
-		hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, true);
+		func (store, host, port, created, max_age, include_subdomains);
 	    }
 	  xfree (line);
 	}
@@ -427,6 +466,67 @@ hsts_read_database (hsts_store_t store, const char *file)
     }
 
   return result;
+}
+
+static void
+hsts_store_dump (hsts_store_t store, const char *filename)
+{
+  int written = 0;
+  char *tmp = NULL;
+  FILE *fp = NULL;
+  hash_table_iterator it;
+  struct hsts_kh *kh = NULL;
+  struct hsts_kh_info *khi = NULL;
+
+  fp = fopen (filename, "w");
+  if (fp)
+    {
+      /* Print preliminary comments. We don't care if any of these fail. */
+      fputs ("# HSTS 1.0 Known Hosts database for GNU Wget.\n", fp);
+      fputs ("# Edit at your own risk.\n", fp);
+
+      /* Now cycle through the HSTS store in memory and dump the entries */
+      for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (written >= 0);)
+      {
+	kh = (struct hsts_kh *) it.key;
+	khi = (struct hsts_kh_info *) it.value;
+
+	/* print hostname */
+	if (khi->include_subdomains)
+	  written |= fputc ('.', fp);
+
+	written |= fputs (kh->host, fp);
+
+	if (kh->explicit_port != 0)
+	  {
+	    tmp = aprintf ("%i", kh->explicit_port);
+	    if (tmp)
+	      {
+		written |= fputc (':', fp);
+		written |= fputs (tmp, fp);
+	      }
+	    free (tmp);
+	  }
+
+	written |= fputc (SEPARATOR, fp);
+
+	/* print creation time */
+	tmp = aprintf ("%lu", khi->created);
+	written |= fputs (tmp, fp);
+	free (tmp);
+
+	written |= fputc (SEPARATOR, fp);
+
+	/* print max-age */
+	tmp = aprintf ("%lu", khi->max_age);
+	written |= fputs (tmp, fp);
+	free (tmp);
+
+	written |= fputc ('\n', fp);
+      }
+
+      fclose (fp);
+    }
 }
 
 /* HSTS API */
@@ -514,11 +614,12 @@ hsts_store_entry (hsts_store_t store,
 	    hsts_remove_entry (store, kh);
 	  else if (max_age > 0)
 	    {
-	      if (entry->include_subdomains != include_subdomains)
-		entry->include_subdomains = include_subdomains;
+	      entry->include_subdomains = include_subdomains;
+
 	      if (entry->max_age != max_age)
 		{
-		  /* RFC 6797 states that 'max_age' is a TTL relative to the reception of the STS header */
+		  /* RFC 6797 states that 'max_age' is a TTL relative to the reception of the STS header
+		     so we have to update the 'created' field too */
 		  t = time (NULL);
 		  if (t != -1)
 		    entry->created = t;
@@ -536,7 +637,7 @@ hsts_store_entry (hsts_store_t store,
 	     We have to perform an explicit check because it might
 	     happen we got a non-existent entry with max_age == 0.
 	   */
-	  result = hsts_new_entry (store, host, port, max_age, include_subdomains);
+	  result = hsts_add_entry (store, host, port, max_age, include_subdomains);
 	}
       /* we ignore new entries with max_age == 0 */
     }
@@ -549,79 +650,40 @@ hsts_store_entry (hsts_store_t store,
 hsts_store_t
 hsts_store_open (const char *filename)
 {
-  hsts_store_t store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
+  hsts_store_t store = NULL;
+  struct stat st;
 
-  if (!hsts_read_database (store, filename))
+  store = xnew0 (hsts_store_t);
+  store->store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
+
+  if (stat (filename, &st) == 0)
+      store->last_mtime = st.st_mtime;
+
+  if (!hsts_read_database (store, filename, false))
     {
       /* abort! */
       hsts_store_close (store);
+      xfree (store);
       store = NULL;
     }
 
   return store;
 }
 
-/* TODO reload file in case multiple instances of Wget are running */
 void
 hsts_store_save (hsts_store_t store, const char *filename)
 {
-  int written = 0;
-  char *tmp = NULL;
-  FILE *fp = NULL;
-  hash_table_iterator it;
-  struct hsts_kh *kh = NULL;
-  struct hsts_kh_info *khi = NULL;
+  struct stat st;
 
-  fp = fopen (filename, "w");
-  if (fp)
-    {
-      /* Print preliminary comments. We don't care if any of these fail. */
-      fputs ("# HSTS 1.0 Known Hosts database for GNU Wget.\n", fp);
-      fputs ("# Edit at your own risk.\n", fp);
+  /* If the file has changed, merge the changes with our in-memory data
+     before dumping them to the file.
+     Otherwise we could potentially overwrite the data stored by other Wget processes.
+   */
+  if (stat (filename, &st) == 0 && st.st_mtime > store->last_mtime)
+    hsts_read_database (store, filename, true);
 
-      /* Now cycle through the HSTS store in memory and dump the entries */
-      for (hash_table_iterate (store, &it); hash_table_iter_next (&it) && (written >= 0);)
-	{
-	  kh = (struct hsts_kh *) it.key;
-	  khi = (struct hsts_kh_info *) it.value;
-
-	  /* print hostname */
-	  if (khi->include_subdomains)
-	    written |= fputc ('.', fp);
-
-	  written |= fputs (kh->host, fp);
-
-	  if (kh->explicit_port != 0)
-	    {
-	      tmp = aprintf ("%i", kh->explicit_port);
-	      if (tmp)
-		{
-		  written |= fputc (':', fp);
-		  written |= fputs (tmp, fp);
-		}
-	      free (tmp);
-	    }
-
-	  written |= fputc (SEPARATOR, fp);
-
-	  /* print creation time */
-	  tmp = aprintf ("%lu", khi->created);
-	  written |= fputs (tmp, fp);
-	  free (tmp);
-
-	  written |= fputc (SEPARATOR, fp);
-
-	  /* print max-age */
-	  tmp = aprintf ("%lu", khi->max_age);
-	  written |= fputs (tmp, fp);
-	  free (tmp);
-
-	  written |= fputc ('\n', fp);
-	}
-
-      fclose (fp);
-    }
-  return;
+  /* now dump to the file */
+  hsts_store_dump (store, filename);
 }
 
 void
@@ -630,14 +692,14 @@ hsts_store_close (hsts_store_t store)
   hash_table_iterator it;
 
   /* free all the host fields */
-  for (hash_table_iterate (store, &it); hash_table_iter_next (&it);)
+  for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it);)
     {
       xfree (((struct hsts_kh *) it.key)->host);
       xfree (it.key);
       xfree (it.value);
     }
 
-  hash_table_destroy (store);
+  hash_table_destroy (store->store);
 }
 
 #ifdef TESTING
