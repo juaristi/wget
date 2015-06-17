@@ -149,23 +149,7 @@ get_hsts_database (void)
     {
       home = home_dir ();
       if (home)
-	{
-	  filename = aprintf ("%s/.wget-hsts", home);
-
-	  /* hsts_store_open() expects the file to exist, so create it if it doesn't */
-	  if (!file_exists_p (filename))
-	    {
-	      fp = fopen (filename, "w");
-	      if (fp)
-		fclose (fp);
-	      else
-		{
-		  /* We were unable to create the file. Abort! */
-		  xfree (filename);
-		  filename = NULL;
-		}
-	    }
-	}
+	filename = aprintf ("%s/.wget-hsts", home);
     }
 
   return filename;

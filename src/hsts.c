@@ -438,7 +438,6 @@ hsts_read_database (hsts_store_t store, const char *file, bool merge_with_existi
   char *line = NULL;
   size_t len = 0;
   bool result = false;
-  struct stat st;
   bool (*func)(hsts_store_t, const char *, int, time_t, time_t, bool);
 
   char *host = NULL;
@@ -655,16 +654,20 @@ hsts_store_open (const char *filename)
 
   store = xnew0 (hsts_store_t);
   store->store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
+  store->last_mtime = 0;
 
-  if (stat (filename, &st) == 0)
-      store->last_mtime = st.st_mtime;
-
-  if (!hsts_read_database (store, filename, false))
+  if (file_exists_p (filename))
     {
-      /* abort! */
-      hsts_store_close (store);
-      xfree (store);
-      store = NULL;
+      if (stat (filename, &st) == 0)
+	store->last_mtime = st.st_mtime;
+
+      if (!hsts_read_database (store, filename, false))
+	{
+	  /* abort! */
+	  hsts_store_close (store);
+	  xfree (store);
+	  store = NULL;
+	}
     }
 
   return store;
@@ -675,15 +678,18 @@ hsts_store_save (hsts_store_t store, const char *filename)
 {
   struct stat st;
 
-  /* If the file has changed, merge the changes with our in-memory data
-     before dumping them to the file.
-     Otherwise we could potentially overwrite the data stored by other Wget processes.
-   */
-  if (stat (filename, &st) == 0 && st.st_mtime > store->last_mtime)
-    hsts_read_database (store, filename, true);
+  if (hash_table_count (store->store) > 0)
+    {
+      /* If the file has changed, merge the changes with our in-memory data
+	 before dumping them to the file.
+	 Otherwise we could potentially overwrite the data stored by other Wget processes.
+       */
+      if (stat (filename, &st) == 0 && store->last_mtime && st.st_mtime > store->last_mtime)
+	hsts_read_database (store, filename, true);
 
-  /* now dump to the file */
-  hsts_store_dump (store, filename);
+      /* now dump to the file */
+      hsts_store_dump (store, filename);
+    }
 }
 
 void
