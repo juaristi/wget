@@ -803,7 +803,7 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
       if (opt.hsts && hsts_store)
 	{
 	  if (hsts_match (hsts_store, u))
-	    DEBUGP(("URL transformed to HTTPS per HSTS policy\n"));
+	    logprintf (LOG_VERBOSE, "URL transformed to HTTPS per HSTS policy\n");
 	}
       result = http_loop (u, orig_parsed, &mynewloc, &local_file, refurl, dt,
                           proxy_url, iri);

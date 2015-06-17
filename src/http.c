@@ -1286,8 +1286,8 @@ parse_strict_transport_security (const char *header, time_t *max_age, bool *incl
 	  if (include_subdomains)
 	    *include_subdomains = is;
 
-	  logprintf (LOG_VERBOSE, "Parsed Strict-Transport-Security max-age = %s, includeSubDomains = %s\n",
-		     c_max_age, (is ? "true" : "false"));
+	  DEBUGP(("Parsed Strict-Transport-Security max-age = %s, includeSubDomains = %s\n",
+		     c_max_age, (is ? "true" : "false")));
 
 	  success = true;
 	}
