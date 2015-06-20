@@ -137,6 +137,7 @@ i18n_initialize (void)
 #endif /* ENABLE_NLS */
 }
 
+#ifdef HAVE_HSTS
 static char*
 get_hsts_database (void)
 {
@@ -197,6 +198,7 @@ save_hsts (void)
 	xfree (filename);
     }
 }
+#endif
 
 /* Definition of command-line options. */
 
@@ -287,8 +289,10 @@ static struct cmdline_option option_data[] =
     { "header", 0, OPT_VALUE, "header", -1 },
     { "help", 'h', OPT_FUNCALL, (void *)print_help, no_argument },
     { "host-directories", 0, OPT_BOOLEAN, "addhostdir", -1 },
+#ifdef HAVE_HSTS
     { "hsts", 0, OPT_BOOLEAN, "hsts", -1},
     { "hsts-file", 0, OPT_VALUE, "hsts-file", -1 },
+#endif
     { "html-extension", 'E', OPT_BOOLEAN, "adjustextension", -1 }, /* deprecated */
     { "htmlify", 0, OPT_BOOLEAN, "htmlify", -1 },
     { "http-keep-alive", 0, OPT_BOOLEAN, "httpkeepalive", -1 },
@@ -1726,6 +1730,7 @@ outputting to a regular file.\n"));
   signal (SIGWINCH, progress_handle_sigwinch);
 #endif
 
+#ifdef HAVE_HSTS
   hsts_store = NULL;
 
   /* Load the HSTS database.
@@ -1735,6 +1740,7 @@ outputting to a regular file.\n"));
    */
   if (opt.hsts)
     load_hsts ();
+#endif
 
   /* Retrieve the URLs from argument list.  */
   for (t = url; *t; t++)
@@ -1843,8 +1849,10 @@ outputting to a regular file.\n"));
   if (opt.cookies_output)
     save_cookies ();
 
+#ifdef HAVE_HSTS
   if (opt.hsts && hsts_store)
     save_hsts ();
+#endif
 
   if (opt.convert_links && !opt.delete_after)
     convert_all_links ();

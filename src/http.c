@@ -1254,6 +1254,7 @@ parse_content_disposition (const char *hdr, char **filename)
     return false;
 }
 
+#ifdef HAVE_HSTS
 static bool
 parse_strict_transport_security (const char *header, time_t *max_age, bool *include_subdomains)
 {
@@ -1301,6 +1302,7 @@ parse_strict_transport_security (const char *header, time_t *max_age, bool *incl
 
   return success;
 }
+#endif
 
 /* Persistent connections.  Currently, we cache the most recently used
    connection as persistent, provided that the HTTP server agrees to
@@ -2517,9 +2519,6 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   char *type = NULL;
   char *user, *passwd;
   char *proxyauth;
-  const char *hsts_params;
-  time_t max_age;
-  bool include_subdomains;
   int statcode;
   int write_error;
   wgint contlen, contrange;
@@ -2527,6 +2526,11 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   FILE *fp;
   int err;
   uerr_t retval;
+#ifdef HAVE_HSTS
+  const char *hsts_params;
+  time_t max_age;
+  bool include_subdomains;
+#endif
 
   int sock = -1;
 
@@ -2986,6 +2990,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   else
     hs->error = xstrdup (message);
 
+#ifdef HAVE_HSTS
   if (opt.hsts && hsts_store)
     {
       hsts_params = resp_header_strdup (resp, "Strict-Transport-Security");
@@ -3006,6 +3011,7 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
 		(include_subdomains ? "true" : "false")));
 	}
     }
+#endif
 
   type = resp_header_strdup (resp, "Content-Type");
   if (type)

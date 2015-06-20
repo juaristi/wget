@@ -28,8 +28,9 @@ grants you additional permission to convey the resulting work.
 Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
-
 #include "wget.h"
+
+#ifdef HAVE_HSTS
 #include "hsts.h"
 #include "host.h" /* for is_valid_ip_address() */
 #include "init.h" /* for home_dir() */
@@ -900,4 +901,5 @@ test_hsts_read_database (void)
 
   return NULL;
 }
-#endif
+#endif /* TESTING */
+#endif /* HAVE_HSTS */

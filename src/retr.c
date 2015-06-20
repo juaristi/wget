@@ -800,11 +800,13 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
 #endif
       || (proxy_url && proxy_url->scheme == SCHEME_HTTP))
     {
+#ifdef HAVE_HSTS
       if (opt.hsts && hsts_store)
 	{
 	  if (hsts_match (hsts_store, u))
 	    logprintf (LOG_VERBOSE, "URL transformed to HTTPS per HSTS policy\n");
 	}
+#endif
       result = http_loop (u, orig_parsed, &mynewloc, &local_file, refurl, dt,
                           proxy_url, iri);
     }

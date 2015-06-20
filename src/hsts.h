@@ -28,11 +28,13 @@ grants you additional permission to convey the resulting work.
 Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
+#include "wget.h"
+
+#ifdef HAVE_HSTS
 
 #ifndef HSTS_H
 #define HSTS_H
 
-#include "wget.h"
 #include "url.h"
 #include "hash.h"
 
@@ -54,4 +56,5 @@ bool hsts_match (hsts_store_t, struct url *);
 
 /* make the HSTS store global */
 hsts_store_t hsts_store;
-#endif
+#endif /* HSTS_H */
+#endif /* HAVE_HSTS */
