@@ -141,7 +141,6 @@ static char*
 get_hsts_database (void)
 {
   char *home = NULL, *filename = NULL;
-  FILE *fp = NULL;
 
   if (opt.hsts_file)
     filename = opt.hsts_file;
