@@ -65,9 +65,11 @@ enum hsts_kh_match {
 #define hsts_is_host_eligible(scheme, host) \
     (hsts_is_scheme_valid (scheme) && hsts_is_host_name_valid (host))
 
-#define DEFAULT_SSL_PORT 443
+#define DEFAULT_HTTP_PORT 80
+#define DEFAULT_SSL_PORT  443
 #define CHECK_EXPLICIT_PORT(p1, p2) (p1 == 0 || p1 == p2)
-#define MAKE_EXPLICIT_PORT(p) (p == DEFAULT_SSL_PORT ? 0 : p)
+#define MAKE_EXPLICIT_PORT(s, p) (s == SCHEME_HTTPS ? (p == DEFAULT_SSL_PORT ? 0 : p) \
+    : (p == DEFAULT_HTTP_PORT ? 0 : p))
 
 #define SETPARAM(p, v) do { 	\
     if (p != NULL) 		\
@@ -199,7 +201,7 @@ hsts_new_entry_internal (hsts_store_t store,
   unsigned int i = 0;
 
   kh->host = xstrdup (host);
-  kh->explicit_port = MAKE_EXPLICIT_PORT (port);
+  kh->explicit_port = MAKE_EXPLICIT_PORT (SCHEME_HTTPS, port);
 
   khi->created = created;
   khi->max_age = max_age;
@@ -278,7 +280,8 @@ hsts_store_merge (hsts_store_t store,
   struct hsts_kh_info *khi = NULL;
   bool success = false;
 
-  khi = hsts_find_entry (store,host, port, &match_type, NULL);
+  port = MAKE_EXPLICIT_PORT (SCHEME_HTTPS, port);
+  khi = hsts_find_entry (store, host, port, &match_type, NULL);
   if (khi && match_type == CONGRUENT_MATCH && created > khi->created)
     {
       /* update the entry with the new info */
@@ -545,8 +548,9 @@ hsts_match (hsts_store_t store, struct url *u)
   struct hsts_kh_info *entry = NULL;
   struct hsts_kh *kh = xnew(struct hsts_kh);
   enum hsts_kh_match match = NO_MATCH;
+  int port = MAKE_EXPLICIT_PORT (u->scheme, u->port);
 
-  entry = hsts_find_entry (store, u->host, u->port, &match, kh);
+  entry = hsts_find_entry (store, u->host, port, &match, kh);
   if (entry)
     {
       if ((entry->created + entry->max_age) >= time(NULL))
@@ -606,6 +610,7 @@ hsts_store_entry (hsts_store_t store,
 
   if (hsts_is_host_eligible (scheme, host))
     {
+      port = MAKE_EXPLICIT_PORT (scheme, port);
       entry = hsts_find_entry (store, host, port, &match, kh);
       if (entry && match == CONGRUENT_MATCH)
 	{
