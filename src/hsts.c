@@ -109,82 +109,50 @@ hsts_cmp_func (const void *h1, const void *h2)
 
 /* Private functions. Feel free to make some of these public when needed. */
 
-static enum hsts_kh_match
-hsts_match_type (const char *h1, const char *h2)
-{
-  /* TODO refactor */
-  const char *pi[2], *pe[2];
-  enum hsts_kh_match match_type = NO_MATCH;
-
-  pi[0] = h1;
-  pi[1] = h2;
-  pe[0] = h1 + strlen (h1) - 1;
-  pe[1] = h2 + strlen (h2) - 1;
-
-  while (pi[0] < pe[0] && pi[1] < pe[1])
-    {
-      if (c_tolower (*pe[0]) != c_tolower (*pe[1]))
-	break;
-      pe[0]--;
-      pe[1]--;
-    }
-
-  if ((pe[0] == pi[0]) && (pe[1] == pi[1]) && (c_tolower (*pe[0]) == c_tolower (*pe[1])))
-    match_type = CONGRUENT_MATCH;
-  else if ((pe[1] == pi[1]) && (*(pe[0] - 1) == '.') && ((pe[0] - 1) > pi[0]))
-    match_type = SUPERDOMAIN_MATCH;
-
-  return match_type;
-}
-
-#define hsts_congruent_match(h1, h2) (hsts_match_type (h1, h2) == CONGRUENT_MATCH)
-#define hsts_superdomain_match(h1, h2) (hsts_match_type (h1, h2) == SUPERDOMAIN_MATCH)
-
 static struct hsts_kh_info *
 hsts_find_entry (hsts_store_t store,
-		 const char *host, int port,
+		 const char *host, int explicit_port,
 		 enum hsts_kh_match *match_type,
 		 struct hsts_kh *kh)
 {
   struct hsts_kh *k = NULL;
   struct hsts_kh_info *khi = NULL;
-  hash_table_iterator it;
+  enum hsts_kh_match match = NO_MATCH;
+  char *pos = NULL;
+  char *org_ptr = NULL;
 
-  /* TODO Refactor: avoid code repetition here. */
+  k = (struct hsts_kh *) xnew (struct hsts_kh);
+  k->host = xstrdup_lower (host);
+  k->explicit_port = explicit_port;
 
-  /* Look for congruent matches first */
-  for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (khi == NULL);)
-    {
-      k = (struct hsts_kh *) it.key;
-      if (hsts_congruent_match (host, k->host) && CHECK_EXPLICIT_PORT (k->explicit_port, port))
-	{
-	  khi = (struct hsts_kh_info *) it.value;
-	  SETPARAM (match_type, CONGRUENT_MATCH);
-	  COPYPARAM (kh, k, struct hsts_kh);
-	}
-    }
+  /* save pointer so that we don't get into trouble later when freeing */
+  org_ptr = k->host;
 
+  khi = (struct hsts_kh_info *) hash_table_get (store->store, k);
   if (khi)
-    goto end;
-
-  /* If no congruent matches were found,
-   * look for superdomain matches.
-   */
-  for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (khi == NULL);)
     {
-      k = (struct hsts_kh *) it.key;
-      if (hsts_superdomain_match (host, k->host) && CHECK_EXPLICIT_PORT (k->explicit_port, port))
-	{
-	  khi = (struct hsts_kh_info *) it.value;
-	  SETPARAM (match_type, SUPERDOMAIN_MATCH);
-	  COPYPARAM (kh, k, struct hsts_kh);
-	}
+      match = CONGRUENT_MATCH;
+      goto end;
     }
 
-  if (khi == NULL)
-    SETPARAM (match_type, NO_MATCH);
+  while (match == NO_MATCH &&
+      (pos = strchr (k->host, '.')) && pos - k->host > 0 &&
+      countchars (k->host, '.') > 1)
+    {
+      k->host += (pos - k->host + 1);
+      khi = (struct hsts_kh_info *) hash_table_get (store->store, k);
+      if (khi)
+	match = SUPERDOMAIN_MATCH;
+    }
 
 end:
+  /* restore pointer or we'll get a SEGV */
+  k->host = org_ptr;
+  xfree (k->host);
+
+  SETPARAM (match_type, match);
+  COPYPARAM (kh, k, struct hsts_kh);
+
   return khi;
 }
 
@@ -193,26 +161,23 @@ hsts_new_entry_internal (hsts_store_t store,
 			 const char *host, int port,
 			 time_t created, time_t max_age,
 			 bool include_subdomains,
+			 bool check_validity,
 			 bool check_expired,
 			 bool check_duplicates)
 {
   struct hsts_kh *kh = xnew (struct hsts_kh);
   struct hsts_kh_info *khi = xnew0 (struct hsts_kh_info);
   bool success = false;
-  unsigned int i = 0;
 
-  kh->host = xstrdup (host);
+  kh->host = xstrdup_lower (host);
   kh->explicit_port = MAKE_EXPLICIT_PORT (SCHEME_HTTPS, port);
 
   khi->created = created;
   khi->max_age = max_age;
   khi->include_subdomains = include_subdomains;
 
-  for (i = 0; i < strlen (kh->host); i++)
-    kh->host[i] = c_tolower (kh->host[i]);
-
   /* Check validity */
-  if (!hsts_is_host_name_valid (host))
+  if (check_validity && !hsts_is_host_name_valid (host))
     goto bail;
 
   if (check_expired && ((khi->created + khi->max_age) < khi->created))
@@ -251,7 +216,7 @@ hsts_add_entry (hsts_store_t store,
   /* It might happen time() returned -1 */
   return (t < 0 ?
       false :
-      hsts_new_entry_internal (store, host, port, t, max_age, include_subdomains, true, false));
+      hsts_new_entry_internal (store, host, port, t, max_age, include_subdomains, false, true, false));
 }
 
 /* Creates a new entry, unless an identical one already exists. */
@@ -261,7 +226,7 @@ hsts_new_entry (hsts_store_t store,
 		time_t created, time_t max_age,
 		bool include_subdomains)
 {
-  return hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, true);
+  return hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, true, true);
 }
 
 static void
@@ -795,28 +760,28 @@ test_hsts_new_entry (void)
   created = hsts_store_entry (s, SCHEME_HTTPS, "www.foo.com", 443, 1234, true);
   mu_assert("A new entry should have been created", created == true);
 
-  khi = hsts_find_entry (s, "www.foo.com", 443, &match, NULL);
+  khi = hsts_find_entry (s, "www.foo.com", MAKE_EXPLICIT_PORT (SCHEME_HTTPS, 443), &match, NULL);
   mu_assert("Should've been a congruent match", match == CONGRUENT_MATCH);
   mu_assert("No valid HSTS info was returned", khi != NULL);
   mu_assert("Variable 'max_age' should be 1234", khi->max_age == 1234);
   mu_assert("Variable 'include_subdomains' should be asserted", khi->include_subdomains == true);
 
-  khi = hsts_find_entry (s, "b.www.foo.com", 443, &match, NULL);
+  khi = hsts_find_entry (s, "b.www.foo.com", MAKE_EXPLICIT_PORT (SCHEME_HTTPS, 443), &match, NULL);
   mu_assert("Should've been a superdomain match", match == SUPERDOMAIN_MATCH);
   mu_assert("No valid HSTS info was returned", khi != NULL);
   mu_assert("Variable 'max_age' should be 1234", khi->max_age == 1234);
   mu_assert("Variable 'include_subdomains' should be asserted", khi->include_subdomains == true);
 
-  khi = hsts_find_entry (s, "ww.foo.com", 443, &match, NULL);
+  khi = hsts_find_entry (s, "ww.foo.com", MAKE_EXPLICIT_PORT (SCHEME_HTTPS, 443), &match, NULL);
   mu_assert("Should've been no match", match == NO_MATCH);
 
-  khi = hsts_find_entry (s, "foo.com", 443, &match, NULL);
+  khi = hsts_find_entry (s, "foo.com", MAKE_EXPLICIT_PORT (SCHEME_HTTPS, 443), &match, NULL);
   mu_assert("Should've been no match", match == NO_MATCH);
 
-  khi = hsts_find_entry (s, ".foo.com", 443, &match, NULL);
+  khi = hsts_find_entry (s, ".foo.com", MAKE_EXPLICIT_PORT (SCHEME_HTTPS, 443), &match, NULL);
   mu_assert("Should've been no match", match == NO_MATCH);
 
-  khi = hsts_find_entry (s, ".www.foo.com", 443, &match, NULL);
+  khi = hsts_find_entry (s, ".www.foo.com", MAKE_EXPLICIT_PORT (SCHEME_HTTPS, 443), &match, NULL);
   mu_assert("Should've been no match", match == NO_MATCH);
 
   hsts_store_close (s);
