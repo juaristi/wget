@@ -64,6 +64,7 @@ char *datetime_str (time_t);
 
 char *xstrdup_lower (const char *);
 
+int countchars (const char *, char);
 char *strdupdelim (const char *, const char *);
 char **sepstring (const char *);
 bool subdir_p (const char *, const char *);

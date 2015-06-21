@@ -211,6 +211,18 @@ unsigned char char_prop[ 256] = {
     0,  0,  0,  0,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  8
 };
 
+/* Count and return the number of occurrences of character c in s */
+int countchars (const char *s, char c)
+{
+  int count = 0;
+  for (; *s; s++)
+    {
+      if (*s == c)
+	count++;
+    }
+  return count;
+}
+
 /* Utility function: like xstrdup(), but also lowercases S.  */
 
 char *
