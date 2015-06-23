@@ -43,6 +43,7 @@ as that of the covered work.  */
 #include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <string.h>
 
 struct hsts_kh {
   char *host;
@@ -268,10 +269,11 @@ hsts_parse_line (const char *line,
                  time_t *created, time_t *max_age,
                  bool *include_subdomains)
 {
-  bool result = true;
+  bool result = false;
   int items_read = 0;
 
   char hostname[256];
+  char *port_st = NULL, *tail = NULL;
   int myport = 0;
   char my_incl_subdomains = 0;
   time_t my_created = 0, my_max_age = 0;
@@ -279,17 +281,23 @@ hsts_parse_line (const char *line,
   hostname[0] = 0;
 
   /* read hostname */
-  items_read += sscanf (line, "%255s\t%c\t%lu\t%lu", hostname, &my_incl_subdomains, &my_created, &my_max_age);
-  /* attempt to extract port number */
+  items_read = sscanf (line, "%255s\t%c\t%lu\t%lu",
+                       hostname,
+                       &my_incl_subdomains,
+                       &my_created,
+                       &my_max_age);
 
-  /* second sscanf might have failed, but not all the others,
-     so items_read must be at least four */
-  if (items_read >= 4)
+  /* attempt to extract port number */
+  port_st = strchr (hostname, ':');
+  if (port_st)
+    myport = strtol (++port_st, &tail, 10);
+
+  if (items_read == 4)
     {
       if (hostname && host)
         *host = xstrdup_lower (hostname);
 
-      if (port)
+      if (myport && !tail)
         SETPARAM (port, myport);
 
       SETPARAM (created, my_created);
@@ -362,16 +370,8 @@ hsts_store_dump (hsts_store_t store, const char *filename)
         kh = (struct hsts_kh *) it.key;
         khi = (struct hsts_kh_info *) it.value;
 
-<<<<<<< HEAD
-        /* print hostname */
-        if (khi->include_subdomains)
-          written |= fputc ('.', fp);
-
-        written |= fputs (kh->host, fp);
-=======
 	/* print hostname */
 	written |= fputs (kh->host, fp);
->>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
         if (kh->explicit_port != 0)
           {
@@ -386,12 +386,6 @@ hsts_store_dump (hsts_store_t store, const char *filename)
 
         written |= fputc (SEPARATOR, fp);
 
-<<<<<<< HEAD
-        /* print creation time */
-        tmp = aprintf ("%lu", khi->created);
-        written |= fputs (tmp, fp);
-        free (tmp);
-=======
 	/* print include subdomains flag */
 	written |= fputc ((khi->include_subdomains ? '1' : '0'), fp);
 	written |= fputc (SEPARATOR, fp);
@@ -400,7 +394,6 @@ hsts_store_dump (hsts_store_t store, const char *filename)
 	tmp = aprintf ("%lu", khi->created);
 	written |= fputs (tmp, fp);
 	free (tmp);
->>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
         written |= fputc (SEPARATOR, fp);
 
@@ -761,21 +754,12 @@ test_hsts_read_database (void)
       file = aprintf ("%s/.wget-hsts-testing", home);
       fp = fopen (file, "w");
       if (fp)
-<<<<<<< HEAD
         {
           fputs ("# dummy comment\n", fp);
-          fputs (".foo.example.com\t1434224817\t123123123\n", fp);
-          fputs ("bar.example.com\t1434224817\t456456456\n", fp);
-          fputs ("test.example.com:8080\t1434224817\t789789789\n", fp);
+          fputs ("foo.example.com\t1\t1434224817\t123123123\n", fp);
+          fputs ("bar.example.com\t0\t1434224817\t456456456\n", fp);
+          fputs ("test.example.com:8080\t0\t1434224817\t789789789\n", fp);
           fclose (fp);
-=======
-	{
-	  fputs ("# dummy comment\n", fp);
-	  fputs ("foo.example.com\t1\t1435007866\t123123123\n", fp);
-	  fputs ("bar.example.com\t0\t1435007866\t456456456\n", fp);
-	  /*fputs ("test.example.com:8080\t0\t1434224817\t789789789\n", fp);*/
-	  fclose (fp);
->>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
           store = hsts_store_open (file);
 
@@ -785,11 +769,7 @@ test_hsts_read_database (void)
 
           TEST_URL_NORW(store, "www.bar.example.com", 80);
 
-<<<<<<< HEAD
           TEST_URL_RW (store, "test.example.com", 8080);
-=======
-	  /*TEST_URL_RW (store, "test.example.com", 8080);*/
->>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
           hsts_store_close (store);
           unlink (file);
