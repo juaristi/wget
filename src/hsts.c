@@ -72,13 +72,13 @@ enum hsts_kh_match {
 #define MAKE_EXPLICIT_PORT(s, p) (s == SCHEME_HTTPS ? (p == DEFAULT_SSL_PORT ? 0 : p) \
     : (p == DEFAULT_HTTP_PORT ? 0 : p))
 
-#define SETPARAM(p, v) do { 	\
-    if (p != NULL) 		\
-      *p = v; 			\
+#define SETPARAM(p, v) do {     \
+    if (p != NULL)              \
+      *p = v;                   \
   } while (0)
-#define COPYPARAM(dst, src, t) do {	\
-    if (dst != NULL)			\
-      memcpy (dst, src, sizeof (t));	\
+#define COPYPARAM(dst, src, t) do {     \
+    if (dst != NULL)                    \
+      memcpy (dst, src, sizeof (t));    \
   } while (0)
 
 #define SEPARATOR '\t'
@@ -111,9 +111,9 @@ hsts_cmp_func (const void *h1, const void *h2)
 
 static struct hsts_kh_info *
 hsts_find_entry (hsts_store_t store,
-		 const char *host, int explicit_port,
-		 enum hsts_kh_match *match_type,
-		 struct hsts_kh *kh)
+                 const char *host, int explicit_port,
+                 enum hsts_kh_match *match_type,
+                 struct hsts_kh *kh)
 {
   struct hsts_kh *k = NULL;
   struct hsts_kh_info *khi = NULL;
@@ -142,7 +142,7 @@ hsts_find_entry (hsts_store_t store,
       k->host += (pos - k->host + 1);
       khi = (struct hsts_kh_info *) hash_table_get (store->store, k);
       if (khi)
-	match = SUPERDOMAIN_MATCH;
+        match = SUPERDOMAIN_MATCH;
     }
 
 end:
@@ -158,12 +158,12 @@ end:
 
 static bool
 hsts_new_entry_internal (hsts_store_t store,
-			 const char *host, int port,
-			 time_t created, time_t max_age,
-			 bool include_subdomains,
-			 bool check_validity,
-			 bool check_expired,
-			 bool check_duplicates)
+                         const char *host, int port,
+                         time_t created, time_t max_age,
+                         bool include_subdomains,
+                         bool check_validity,
+                         bool check_expired,
+                         bool check_duplicates)
 {
   struct hsts_kh *kh = xnew (struct hsts_kh);
   struct hsts_kh_info *khi = xnew0 (struct hsts_kh_info);
@@ -208,8 +208,8 @@ bail:
  */
 static bool
 hsts_add_entry (hsts_store_t store,
-		const char *host, int port,
-		time_t max_age, bool include_subdomains)
+                const char *host, int port,
+                time_t max_age, bool include_subdomains)
 {
   time_t t = time (NULL);
 
@@ -222,9 +222,9 @@ hsts_add_entry (hsts_store_t store,
 /* Creates a new entry, unless an identical one already exists. */
 static bool
 hsts_new_entry (hsts_store_t store,
-		const char *host, int port,
-		time_t created, time_t max_age,
-		bool include_subdomains)
+                const char *host, int port,
+                time_t created, time_t max_age,
+                bool include_subdomains)
 {
   return hsts_new_entry_internal (store, host, port, created, max_age, include_subdomains, true, true, true);
 }
@@ -238,9 +238,9 @@ hsts_remove_entry (hsts_store_t store, struct hsts_kh *kh)
 
 static bool
 hsts_store_merge (hsts_store_t store,
-		  const char *host, int port,
-		  time_t created, time_t max_age,
-		  bool include_subdomains)
+                  const char *host, int port,
+                  time_t created, time_t max_age,
+                  bool include_subdomains)
 {
   enum hsts_kh_match match_type = NO_MATCH;
   struct hsts_kh_info *khi = NULL;
@@ -263,9 +263,9 @@ hsts_store_merge (hsts_store_t store,
 
 static bool
 hsts_parse_line (const char *line,
-		 char **host, int *port,
-		 time_t *created, time_t *max_age,
-		 bool *include_subdomains)
+                 char **host, int *port,
+                 time_t *created, time_t *max_age,
+                 bool *include_subdomains)
 {
   bool result = true;
 
@@ -294,9 +294,9 @@ hsts_parse_line (const char *line,
     {
       switch (state)
       {
-	case INITIAL:
-	  state = IN_HOST;
-	  if (*p == '.')
+        case INITIAL:
+          state = IN_HOST;
+          if (*p == '.')
 	    {
 	      SETPARAM(include_subdomains, true);
 	      break;
@@ -304,8 +304,8 @@ hsts_parse_line (const char *line,
 	  else
 	    SETPARAM(include_subdomains, false);
 	  /* fall through */
-	case IN_HOST:
-	  if (host_s == NULL)
+        case IN_HOST:
+          if (host_s == NULL)
 	    host_s = p;
 	  if (!(c_isalnum (*p) || *p == '.'))
 	    {
@@ -420,15 +420,15 @@ hsts_read_database (hsts_store_t store, const char *file, bool merge_with_existi
   if (fp)
     {
       while (getline (&line, &len, fp) > 0)
-	{
-	  if (line[0] != '#')
-	    {
-	      if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains) &&
-		  host && created && max_age)
-		func (store, host, port, created, max_age, include_subdomains);
-	    }
-	  xfree (line);
-	}
+        {
+          if (line[0] != '#')
+            {
+              if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains) &&
+                  host && created && max_age)
+                func (store, host, port, created, max_age, include_subdomains);
+            }
+          xfree (line);
+        }
       fclose (fp);
       result = true;
     }
@@ -456,41 +456,41 @@ hsts_store_dump (hsts_store_t store, const char *filename)
       /* Now cycle through the HSTS store in memory and dump the entries */
       for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (written >= 0);)
       {
-	kh = (struct hsts_kh *) it.key;
-	khi = (struct hsts_kh_info *) it.value;
+        kh = (struct hsts_kh *) it.key;
+        khi = (struct hsts_kh_info *) it.value;
 
-	/* print hostname */
-	if (khi->include_subdomains)
-	  written |= fputc ('.', fp);
+        /* print hostname */
+        if (khi->include_subdomains)
+          written |= fputc ('.', fp);
 
-	written |= fputs (kh->host, fp);
+        written |= fputs (kh->host, fp);
 
-	if (kh->explicit_port != 0)
-	  {
-	    tmp = aprintf ("%i", kh->explicit_port);
-	    if (tmp)
-	      {
-		written |= fputc (':', fp);
-		written |= fputs (tmp, fp);
-	      }
-	    free (tmp);
-	  }
+        if (kh->explicit_port != 0)
+          {
+            tmp = aprintf ("%i", kh->explicit_port);
+            if (tmp)
+              {
+                written |= fputc (':', fp);
+                written |= fputs (tmp, fp);
+              }
+            free (tmp);
+          }
 
-	written |= fputc (SEPARATOR, fp);
+        written |= fputc (SEPARATOR, fp);
 
-	/* print creation time */
-	tmp = aprintf ("%lu", khi->created);
-	written |= fputs (tmp, fp);
-	free (tmp);
+        /* print creation time */
+        tmp = aprintf ("%lu", khi->created);
+        written |= fputs (tmp, fp);
+        free (tmp);
 
-	written |= fputc (SEPARATOR, fp);
+        written |= fputc (SEPARATOR, fp);
 
-	/* print max-age */
-	tmp = aprintf ("%lu", khi->max_age);
-	written |= fputs (tmp, fp);
-	free (tmp);
+        /* print max-age */
+        tmp = aprintf ("%lu", khi->max_age);
+        written |= fputs (tmp, fp);
+        free (tmp);
 
-	written |= fputc ('\n', fp);
+        written |= fputc ('\n', fp);
       }
 
       fclose (fp);
@@ -520,20 +520,20 @@ hsts_match (hsts_store_t store, struct url *u)
   if (entry)
     {
       if ((entry->created + entry->max_age) >= time(NULL))
-	{
-	  if ((match == CONGRUENT_MATCH) ||
-	      (match == SUPERDOMAIN_MATCH && entry->include_subdomains))
-	    {
-	      /* we found a matching Known HSTS Host
-	         rewrite the URL */
-	      u->scheme = SCHEME_HTTPS;
-	      if (u->port == 80)
-		u->port = 443;
-	      url_changed = true;
-	    }
-	}
+        {
+          if ((match == CONGRUENT_MATCH) ||
+              (match == SUPERDOMAIN_MATCH && entry->include_subdomains))
+            {
+              /* we found a matching Known HSTS Host
+                 rewrite the URL */
+              u->scheme = SCHEME_HTTPS;
+              if (u->port == 80)
+                u->port = 443;
+              url_changed = true;
+            }
+        }
       else
-	hsts_remove_entry (store, kh);
+        hsts_remove_entry (store, kh);
     }
 
   xfree(kh);
@@ -565,8 +565,8 @@ hsts_match (hsts_store_t store, struct url *u)
    if an existing entry was updated/deleted. */
 bool
 hsts_store_entry (hsts_store_t store,
-		  enum url_scheme scheme, const char *host, int port,
-		  time_t max_age, bool include_subdomains)
+                  enum url_scheme scheme, const char *host, int port,
+                  time_t max_age, bool include_subdomains)
 {
   bool result = false;
   enum hsts_kh_match match = NO_MATCH;
@@ -579,36 +579,36 @@ hsts_store_entry (hsts_store_t store,
       port = MAKE_EXPLICIT_PORT (scheme, port);
       entry = hsts_find_entry (store, host, port, &match, kh);
       if (entry && match == CONGRUENT_MATCH)
-	{
-	  if (max_age == 0)
-	    hsts_remove_entry (store, kh);
-	  else if (max_age > 0)
-	    {
-	      entry->include_subdomains = include_subdomains;
+        {
+          if (max_age == 0)
+            hsts_remove_entry (store, kh);
+          else if (max_age > 0)
+            {
+              entry->include_subdomains = include_subdomains;
 
-	      if (entry->max_age != max_age)
-		{
-		  /* RFC 6797 states that 'max_age' is a TTL relative to the reception of the STS header
-		     so we have to update the 'created' field too */
-		  t = time (NULL);
-		  if (t != -1)
-		    entry->created = t;
-		  entry->max_age = max_age;
-		}
-	    }
-	  /* we ignore negative max_ages */
-	}
+              if (entry->max_age != max_age)
+                {
+                  /* RFC 6797 states that 'max_age' is a TTL relative to the reception of the STS header
+                     so we have to update the 'created' field too */
+                  t = time (NULL);
+                  if (t != -1)
+                    entry->created = t;
+                  entry->max_age = max_age;
+                }
+            }
+          /* we ignore negative max_ages */
+        }
       else if (entry == NULL || match == SUPERDOMAIN_MATCH)
-	{
-	  /* Either we didn't find a matching host,
-	     or we got a superdomain match.
-	     In either case, we create a new entry.
+        {
+          /* Either we didn't find a matching host,
+             or we got a superdomain match.
+             In either case, we create a new entry.
 
-	     We have to perform an explicit check because it might
-	     happen we got a non-existent entry with max_age == 0.
-	   */
-	  result = hsts_add_entry (store, host, port, max_age, include_subdomains);
-	}
+             We have to perform an explicit check because it might
+             happen we got a non-existent entry with max_age == 0.
+          */
+          result = hsts_add_entry (store, host, port, max_age, include_subdomains);
+        }
       /* we ignore new entries with max_age == 0 */
     }
 
@@ -630,15 +630,15 @@ hsts_store_open (const char *filename)
   if (file_exists_p (filename))
     {
       if (stat (filename, &st) == 0)
-	store->last_mtime = st.st_mtime;
+        store->last_mtime = st.st_mtime;
 
       if (!hsts_read_database (store, filename, false))
-	{
-	  /* abort! */
-	  hsts_store_close (store);
-	  xfree (store);
-	  store = NULL;
-	}
+        {
+          /* abort! */
+          hsts_store_close (store);
+          xfree (store);
+          store = NULL;
+        }
     }
 
   return store;
@@ -652,11 +652,11 @@ hsts_store_save (hsts_store_t store, const char *filename)
   if (hash_table_count (store->store) > 0)
     {
       /* If the file has changed, merge the changes with our in-memory data
-	 before dumping them to the file.
-	 Otherwise we could potentially overwrite the data stored by other Wget processes.
+         before dumping them to the file.
+         Otherwise we could potentially overwrite the data stored by other Wget processes.
        */
       if (stat (filename, &st) == 0 && store->last_mtime && st.st_mtime > store->last_mtime)
-	hsts_read_database (store, filename, true);
+        hsts_read_database (store, filename, true);
 
       /* now dump to the file */
       hsts_store_dump (store, filename);
@@ -703,10 +703,10 @@ open_hsts_test_store ()
       filename = aprintf ("%s/.wget-hsts-test", home);
       fp = fopen (filename, "w");
       if (fp)
-	{
-	  fclose (fp);
-	  store = hsts_store_open (filename);
-	}
+        {
+          fclose (fp);
+          store = hsts_store_open (filename);
+        }
       xfree (filename);
     }
 
@@ -728,9 +728,9 @@ test_url_rewrite (hsts_store_t s, const char *url, int port, bool rewrite)
   if (rewrite)
     {
       if (port == 80)
-	mu_assert("URL: port should've been rewritten to 443", u.port == 443);
+       mu_assert("URL: port should've been rewritten to 443", u.port == 443);
       else
-	mu_assert("URL: port should've been left intact", u.port == port);
+        mu_assert("URL: port should've been left intact", u.port == port);
       mu_assert("URL: scheme should've been rewritten to HTTPS", u.scheme == SCHEME_HTTPS);
       mu_assert("result should've been true", result == true);
     }
@@ -842,26 +842,26 @@ test_hsts_read_database (void)
       file = aprintf ("%s/.wget-hsts-testing", home);
       fp = fopen (file, "w");
       if (fp)
-	{
-	  fputs ("# dummy comment\n", fp);
-	  fputs (".foo.example.com\t1434224817\t123123123\n", fp);
-	  fputs ("bar.example.com\t1434224817\t456456456\n", fp);
-	  fputs ("test.example.com:8080\t1434224817\t789789789\n", fp);
-	  fclose (fp);
+        {
+          fputs ("# dummy comment\n", fp);
+          fputs (".foo.example.com\t1434224817\t123123123\n", fp);
+          fputs ("bar.example.com\t1434224817\t456456456\n", fp);
+          fputs ("test.example.com:8080\t1434224817\t789789789\n", fp);
+          fclose (fp);
 
-	  store = hsts_store_open (file);
+          store = hsts_store_open (file);
 
-	  TEST_URL_RW (store, "foo.example.com", 80);
-	  TEST_URL_RW (store, "www.foo.example.com", 80);
-	  TEST_URL_RW (store, "bar.example.com", 80);
+          TEST_URL_RW (store, "foo.example.com", 80);
+          TEST_URL_RW (store, "www.foo.example.com", 80);
+          TEST_URL_RW (store, "bar.example.com", 80);
 
-	  TEST_URL_NORW(store, "www.bar.example.com", 80);
+          TEST_URL_NORW(store, "www.bar.example.com", 80);
 
-	  TEST_URL_RW (store, "test.example.com", 8080);
+          TEST_URL_RW (store, "test.example.com", 8080);
 
-	  hsts_store_close (store);
-	  unlink (file);
-	}
+          hsts_store_close (store);
+          unlink (file);
+        }
     }
 
   return NULL;
