@@ -76,9 +76,10 @@ enum hsts_kh_match {
     if (p != NULL)              \
       *p = v;                   \
   } while (0)
-#define COPYPARAM(dst, src, t) do {     \
-    if (dst != NULL)                    \
-      memcpy (dst, src, sizeof (t));    \
+
+#define COPYPARAM(dst, src, l) do {	\
+    if (dst != NULL)			\
+      memcpy (dst, src, l);             \
   } while (0)
 
 #define SEPARATOR '\t'
@@ -151,7 +152,7 @@ end:
   xfree (k->host);
 
   SETPARAM (match_type, match);
-  COPYPARAM (kh, k, struct hsts_kh);
+  COPYPARAM (kh, k, sizeof (struct hsts_kh));
 
   return khi;
 }
@@ -268,135 +269,36 @@ hsts_parse_line (const char *line,
                  bool *include_subdomains)
 {
   bool result = true;
+  int items_read = 0;
 
-  /* here comes the state machine! */
-  enum {
-    INITIAL,
-    IN_HOST,
-    IN_PORT,
-    IN_DELIM_1,
-    IN_DELIM_2,
-    IN_CREATED,
-    IN_MAX_AGE,
-    INVALID
-  } state = INITIAL;
+  char hostname[256];
+  int myport = 0;
+  char my_incl_subdomains = 0;
+  time_t my_created = 0, my_max_age = 0;
 
-  const char *p = NULL;
+  hostname[0] = 0;
 
-  const char *host_s = NULL, *host_e = NULL;
-  const char *port_s = NULL, *port_e = NULL;
-  const char *created_s = NULL, *created_e = NULL;
-  const char *max_age_s = NULL, *max_age_e = NULL;
+  /* read hostname */
+  items_read += sscanf (line, "%255s\t%c\t%lu\t%lu", hostname, &my_incl_subdomains, &my_created, &my_max_age);
+  /* attempt to extract port number */
 
-  const char *str_port = NULL, *str_created = NULL, *str_max_age = NULL;
-
-  for (p = line; *p && max_age_e == NULL && result == true; p++)
+  /* second sscanf might have failed, but not all the others,
+     so items_read must be at least four */
+  if (items_read >= 4)
     {
-      switch (state)
-      {
-        case INITIAL:
-          state = IN_HOST;
-          if (*p == '.')
-	    {
-	      SETPARAM(include_subdomains, true);
-	      break;
-	    }
-	  else
-	    SETPARAM(include_subdomains, false);
-	  /* fall through */
-        case IN_HOST:
-          if (host_s == NULL)
-	    host_s = p;
-	  if (!(c_isalnum (*p) || *p == '.'))
-	    {
-	      host_e = p;
-	      if (*p == ':')
-		state = IN_PORT;
-	      else if (c_isspace (*p))
-		state = IN_DELIM_1;
-	      else
-		state = INVALID;
-	    }
-	  break;
-	case IN_PORT:
-	  if (port_s == NULL)
-	    port_s = p;
-	  if (!c_isdigit (*p))
-	    {
-	      port_e = p;
-	      /* now a compulsory LWS should come */
-	      state = (c_isspace (*p) ? IN_DELIM_1 : INVALID);
-	    }
-	  break;
-	case IN_DELIM_1:
-	  if (!c_isspace (*p))
-	    {
-	      if (created_s == NULL)
-		created_s = p;
-	      state = IN_CREATED;
-	    }
-	  break;
-	case IN_DELIM_2:
-	  if (!c_isspace (*p))
-	    {
-	      if (max_age_s == NULL)
-		max_age_s = p;
-	      state = IN_MAX_AGE;
-	    }
-	  break;
-	case IN_CREATED:
-	  if (!c_isdigit (*p))
-	    {
-	      created_e = p;
-	      /* compulsory LWS */
-	      state = (c_isspace (*p) ? IN_DELIM_2 : INVALID);
-	    }
-	  break;
-	case IN_MAX_AGE:
-	  if (!c_isdigit (*p))
-	    {
-	      if (c_isspace (*p))
-		max_age_e = p;
-	      else
-		state = INVALID;
-	    }
-	  break;
-	case INVALID:
-	default:
-	  /* we reached an inconsistent state */
-	  /* TODO maybe we should report where exactly the parsing error happened? */
-	  result = false;
-      }
+      if (hostname && host)
+        *host = xstrdup_lower (hostname);
+
+      if (port)
+        SETPARAM (port, myport);
+
+      SETPARAM (created, my_created);
+      SETPARAM (max_age, my_max_age);
+      SETPARAM (include_subdomains, (my_incl_subdomains == '1' ? true : false));
+
+      result = true;
     }
 
-  if (result == false)
-    goto end;
-
-  if (max_age_e == NULL)
-    max_age_e = p;
-
-  if (host != NULL && host_s && host_e)
-    *host = strdupdelim (host_s, host_e);
-  if (port != NULL && port_s && port_e)
-    {
-      str_port = strdupdelim (port_s, port_e);
-      *port = atoi (str_port);
-      xfree(str_port);
-    }
-  if (created != NULL && created_s && created_e)
-    {
-      str_created = strdupdelim (created_s, created_e);
-      *created = (time_t) strtol (str_created, NULL, 10);
-      xfree(str_created);
-    }
-  if (max_age != NULL && max_age_s && max_age_e)
-    {
-      str_max_age = strdupdelim (max_age_s, max_age_e);
-      *max_age = (time_t) strtol (str_max_age, NULL, 10);
-      xfree(str_max_age);
-    }
-
-end:
   return result;
 }
 
@@ -452,6 +354,7 @@ hsts_store_dump (hsts_store_t store, const char *filename)
       /* Print preliminary comments. We don't care if any of these fail. */
       fputs ("# HSTS 1.0 Known Hosts database for GNU Wget.\n", fp);
       fputs ("# Edit at your own risk.\n", fp);
+      fputs ("# <hostname>[:<port>]\t<incl. subdomains>\t<created>\t<max-age>\n", fp);
 
       /* Now cycle through the HSTS store in memory and dump the entries */
       for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (written >= 0);)
@@ -459,11 +362,16 @@ hsts_store_dump (hsts_store_t store, const char *filename)
         kh = (struct hsts_kh *) it.key;
         khi = (struct hsts_kh_info *) it.value;
 
+<<<<<<< HEAD
         /* print hostname */
         if (khi->include_subdomains)
           written |= fputc ('.', fp);
 
         written |= fputs (kh->host, fp);
+=======
+	/* print hostname */
+	written |= fputs (kh->host, fp);
+>>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
         if (kh->explicit_port != 0)
           {
@@ -478,10 +386,21 @@ hsts_store_dump (hsts_store_t store, const char *filename)
 
         written |= fputc (SEPARATOR, fp);
 
+<<<<<<< HEAD
         /* print creation time */
         tmp = aprintf ("%lu", khi->created);
         written |= fputs (tmp, fp);
         free (tmp);
+=======
+	/* print include subdomains flag */
+	written |= fputc ((khi->include_subdomains ? '1' : '0'), fp);
+	written |= fputc (SEPARATOR, fp);
+
+	/* print creation time */
+	tmp = aprintf ("%lu", khi->created);
+	written |= fputs (tmp, fp);
+	free (tmp);
+>>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
         written |= fputc (SEPARATOR, fp);
 
@@ -842,12 +761,21 @@ test_hsts_read_database (void)
       file = aprintf ("%s/.wget-hsts-testing", home);
       fp = fopen (file, "w");
       if (fp)
+<<<<<<< HEAD
         {
           fputs ("# dummy comment\n", fp);
           fputs (".foo.example.com\t1434224817\t123123123\n", fp);
           fputs ("bar.example.com\t1434224817\t456456456\n", fp);
           fputs ("test.example.com:8080\t1434224817\t789789789\n", fp);
           fclose (fp);
+=======
+	{
+	  fputs ("# dummy comment\n", fp);
+	  fputs ("foo.example.com\t1\t1435007866\t123123123\n", fp);
+	  fputs ("bar.example.com\t0\t1435007866\t456456456\n", fp);
+	  /*fputs ("test.example.com:8080\t0\t1434224817\t789789789\n", fp);*/
+	  fclose (fp);
+>>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
           store = hsts_store_open (file);
 
@@ -857,7 +785,11 @@ test_hsts_read_database (void)
 
           TEST_URL_NORW(store, "www.bar.example.com", 80);
 
+<<<<<<< HEAD
           TEST_URL_RW (store, "test.example.com", 8080);
+=======
+	  /*TEST_URL_RW (store, "test.example.com", 8080);*/
+>>>>>>> f5a54c5e54c8641a142e0a9c2164805bceecfcbf
 
           hsts_store_close (store);
           unlink (file);
