@@ -79,8 +79,8 @@ enum hsts_kh_match {
       *p = v;                   \
   } while (0)
 
-#define COPYPARAM(dst, src, l) do {	\
-    if (dst != NULL)			\
+#define COPYPARAM(dst, src, l) do {     \
+    if (dst != NULL)                    \
       memcpy (dst, src, l);             \
   } while (0)
 
@@ -378,8 +378,8 @@ hsts_store_dump (hsts_store_t store, const char *filename)
         kh = (struct hsts_kh *) it.key;
         khi = (struct hsts_kh_info *) it.value;
 
-	/* print hostname */
-	written |= fputs (kh->host, fp);
+        /* print hostname */
+        written |= fputs (kh->host, fp);
 
         if (kh->explicit_port != 0)
           {
@@ -394,14 +394,14 @@ hsts_store_dump (hsts_store_t store, const char *filename)
 
         written |= fputc (SEPARATOR, fp);
 
-	/* print include subdomains flag */
-	written |= fputc ((khi->include_subdomains ? '1' : '0'), fp);
-	written |= fputc (SEPARATOR, fp);
+        /* print include subdomains flag */
+        written |= fputc ((khi->include_subdomains ? '1' : '0'), fp);
+        written |= fputc (SEPARATOR, fp);
 
-	/* print creation time */
-	tmp = aprintf ("%lu", khi->created);
-	written |= fputs (tmp, fp);
-	free (tmp);
+        /* print creation time */
+        tmp = aprintf ("%lu", khi->created);
+        written |= fputs (tmp, fp);
+        free (tmp);
 
         written |= fputc (SEPARATOR, fp);
 
