@@ -609,12 +609,11 @@ hsts_store_close (hsts_store_t store)
       return test_url_rewrite (s, u, p, false); \
   } while (0)
 
-static hsts_store_t
-open_hsts_test_store ()
+static char *
+get_hsts_store_filename ()
 {
   char *home = NULL, *filename = NULL;
   FILE *fp = NULL;
-  hsts_store_t store = NULL;
 
   home = home_dir ();
   if (home)
@@ -622,14 +621,33 @@ open_hsts_test_store ()
       filename = aprintf ("%s/.wget-hsts-test", home);
       fp = fopen (filename, "w");
       if (fp)
-        {
-          fclose (fp);
-          store = hsts_store_open (filename);
-        }
-      xfree (filename);
+        fclose (fp);
     }
 
+  return filename;
+}
+
+static hsts_store_t
+open_hsts_test_store ()
+{
+  char *filename = NULL;
+  hsts_store_t store = NULL;
+
+  filename = get_hsts_store_filename ();
+  store = hsts_store_open (filename);
+  xfree (filename);
+
   return store;
+}
+
+static hsts_store_t
+close_hsts_test_store ()
+{
+  char *filename = NULL;
+
+  filename = get_hsts_store_filename ();
+  unlink (filename);
+  xfree (filename);
 }
 
 static char*
@@ -704,6 +722,7 @@ test_hsts_new_entry (void)
   mu_assert("Should've been no match", match == NO_MATCH);
 
   hsts_store_close (s);
+  close_hsts_test_store ();
 
   return NULL;
 }
@@ -724,6 +743,7 @@ test_hsts_url_rewrite_superdomain (void)
   TEST_URL_RW (s, "bar.www.foo.com", 80);
 
   hsts_store_close (s);
+  close_hsts_test_store ();
 
   return NULL;
 }
@@ -744,6 +764,7 @@ test_hsts_url_rewrite_congruent (void)
   TEST_URL_NORW (s, "www.foo.com", 80);
 
   hsts_store_close (s);
+  close_hsts_test_store ();
 
   return NULL;
 }
