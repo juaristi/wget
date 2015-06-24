@@ -758,6 +758,18 @@ HTTPS (SSL/TLS) options:\n"),
     "\n",
 #endif /* HAVE_SSL */
 
+#ifdef HAVE_HSTS
+    N_("\
+HSTS options:\n"),
+    N_("\
+       --hsts                      enable HSTS (default)\n"),
+    N_("\
+       --no-hsts                   disable HSTS\n"),
+    N_("\
+       --hsts-file                 path of HSTS database (will override default)\n"),
+    "\n",
+#endif
+
     N_("\
 FTP options:\n"),
 #ifdef __VMS
