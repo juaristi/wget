@@ -412,6 +412,9 @@ hsts_store_dump (hsts_store_t store, const char *filename)
         written |= fputc ('\n', fp);
       }
 
+      if (written < 0)
+        logprintf (LOG_ALWAYS, "Could not write the HSTS database correctly.\n");
+
       fclose (fp);
     }
 }
