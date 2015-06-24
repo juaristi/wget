@@ -602,6 +602,9 @@ hsts_store_close (hsts_store_t store)
 }
 
 #ifdef TESTING
+/* I know I'm really evil because I'm writing macros
+   that change control flow. But we're testing, who will tell? :D
+ */
 #define TEST_URL_RW(s, u, p) do { \
     if (test_url_rewrite (s, u, p, true)) \
       return test_url_rewrite (s, u, p, true); \
