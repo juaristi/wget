@@ -37,6 +37,7 @@ as that of the covered work.  */
 #include "utils.h"
 #ifdef TESTING
 #include "test.h"
+#include <unistd.h> /* for unlink(), used only in tests */
 #endif
 #include "c-ctype.h"
 
@@ -284,8 +285,8 @@ hsts_parse_line (const char *line,
   items_read = sscanf (line, "%255s\t%c\t%lu\t%lu",
                        hostname,
                        &my_incl_subdomains,
-                       &my_created,
-                       &my_max_age);
+                       (unsigned long *) &my_created,
+                       (unsigned long *) &my_max_age);
 
   /* attempt to extract port number */
   port_st = strchr (hostname, ':');
@@ -294,7 +295,7 @@ hsts_parse_line (const char *line,
 
   if (items_read == 4)
     {
-      if (hostname && host)
+      if (hostname[0] && host)
         *host = (port_st ? strdupdelim (hostname, port_st) : xstrdup (hostname));
 
       if (myport && !*tail)
