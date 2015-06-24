@@ -290,14 +290,14 @@ hsts_parse_line (const char *line,
   /* attempt to extract port number */
   port_st = strchr (hostname, ':');
   if (port_st)
-    myport = strtol (++port_st, &tail, 10);
+    myport = strtol (port_st + 1, &tail, 10);
 
   if (items_read == 4)
     {
       if (hostname && host)
-        *host = xstrdup_lower (hostname);
+        *host = (port_st ? strdupdelim (hostname, port_st) : xstrdup (hostname));
 
-      if (myport && !tail)
+      if (myport && !*tail)
         SETPARAM (port, myport);
 
       SETPARAM (created, my_created);
@@ -335,7 +335,14 @@ hsts_read_database (hsts_store_t store, const char *file, bool merge_with_existi
             {
               if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains) &&
                   host && created && max_age)
-                func (store, host, port, created, max_age, include_subdomains);
+                {
+                  func (store, host, port, created, max_age, include_subdomains);
+                  xfree (host);
+                  port = 0;
+                  created = 0;
+                  max_age = 0;
+                  include_subdomains = false;
+                }
             }
           xfree (line);
         }
