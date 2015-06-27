@@ -17,12 +17,16 @@ class HTTPTest(BaseTest):
                  pre_hook=None,
                  test_params=None,
                  post_hook=None,
-                 protocols=(HTTP,)):
+                 protocols=(HTTP,),
+                 req_protocols=None,
+				 port=None):
         super(HTTPTest, self).__init__(name,
                                        pre_hook,
                                        test_params,
                                        post_hook,
-                                       protocols)
+                                       protocols,
+                                       req_protocols,
+									   port)
         with self:
             # if any exception occurs, self.__exit__ will be immediately called
             self.server_setup()
@@ -30,8 +34,11 @@ class HTTPTest(BaseTest):
             print_green('Test Passed.')
 
     def instantiate_server_by(self, protocol):
+        addr = None
+        if self.port > 0:
+            addr = ('localhost', self.port)
         server = {HTTP: HTTPd,
-                  HTTPS: HTTPSd}[protocol]()
+                  HTTPS: HTTPSd}[protocol](addr)
         server.start()
 
         return server

@@ -22,7 +22,7 @@ class BaseTest:
         * instantiate_server_by(protocol)
     """
 
-    def __init__(self, name, pre_hook, test_params, post_hook, protocols):
+    def __init__(self, name, pre_hook, test_params, post_hook, protocols, req_protocols, port):
         """
         Define the class-wide variables (or attributes).
         Attributes should not be defined outside __init__.
@@ -36,9 +36,18 @@ class BaseTest:
         self.post_configs = post_hook or {}
         self.protocols = protocols
 
+        if req_protocols is None:
+            self.req_protocols = map(lambda p: p.lower(), self.protocols)
+        else:
+            self.req_protocols = req_protocols
+
         self.servers = []
         self.domains = []
-        self.port = -1
+
+        if port is None:
+            self.port = -1
+        else:
+            self.port = port
 
         self.wget_options = ''
         self.urls = []
@@ -122,9 +131,9 @@ class BaseTest:
         else:
             cmd_line = '%s %s ' % (wget_path, wget_options)
 
-        for protocol, urls, domain in zip(self.protocols,
-                                          self.urls,
-                                          self.domains):
+        for req_protocol, urls, domain in zip(self.req_protocols,
+                                                        self.urls,
+                                                        self.domains):
             # zip is function for iterating multiple lists at the same time.
             # e.g. for item1, item2 in zip([1, 5, 3],
             #                              ['a', 'e', 'c']):
@@ -134,7 +143,7 @@ class BaseTest:
             # 5 e
             # 3 c
             for url in urls:
-                cmd_line += '%s://%s/%s ' % (protocol.lower(), domain, url)
+                cmd_line += '%s://%s/%s ' % (req_protocol, domain, url)
 
         print(cmd_line)
 
