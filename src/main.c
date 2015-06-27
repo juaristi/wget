@@ -54,7 +54,7 @@ as that of the covered work.  */
 #include "convert.h"
 #include "spider.h"
 #include "http.h"               /* for save_cookies */
-#include "hsts.h"		/* for initializing hsts_store to NULL */
+#include "hsts.h"               /* for initializing hsts_store to NULL */
 #include "ptimer.h"
 #include "warc.h"
 #include "version.h"
@@ -141,61 +141,52 @@ i18n_initialize (void)
 static char*
 get_hsts_database (void)
 {
-  char *home = NULL, *filename = NULL;
+  char *home;
 
   if (opt.hsts_file)
-    filename = opt.hsts_file;
-  else
-    {
-      home = home_dir ();
-      if (home)
-	filename = aprintf ("%s/.wget-hsts", home);
-    }
+    return xstrdup (opt.hsts_file);
 
-  return filename;
+  home = home_dir ();
+  if (home)
+    return aprintf ("%s/.wget-hsts", home);
+
+  return NULL;
 }
 
 static void
 load_hsts (void)
 {
-  char *filename = NULL;
-
   if (!hsts_store)
     {
-      filename = get_hsts_database ();
+      char *filename = get_hsts_database ();
 
       if (filename)
-	hsts_store = hsts_store_open (filename);
+        {
+          hsts_store = hsts_store_open (filename);
 
-      if (!hsts_store)
-      {
-	if (!filename)
-	  logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store. HSTS will be disabled.\n");
-	else
-	  logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store at '%s'. "
-		     "HSTS will be disabled.\n",
-		     filename);
-      }
+          if (!hsts_store)
+            logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store at '%s'. "
+                       "HSTS will be disabled.\n",
+                       filename);
+        }
+      else
+        logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store. HSTS will be disabled.\n");
 
-      if (!opt.hsts_file && filename)
-	xfree (filename);
+      xfree (filename);
     }
 }
 
 static void
 save_hsts (void)
 {
-  char *filename = NULL;
-
   if (hsts_store)
     {
-      filename = get_hsts_database ();
+      char *filename = get_hsts_database ();
 
       hsts_store_save (hsts_store, filename);
       hsts_store_close (hsts_store);
 
-      if (!opt.hsts_file && filename)
-	xfree (filename);
+      xfree (filename);
     }
 }
 #endif
@@ -761,8 +752,6 @@ HTTPS (SSL/TLS) options:\n"),
 #ifdef HAVE_HSTS
     N_("\
 HSTS options:\n"),
-    N_("\
-       --hsts                      enable HSTS (default)\n"),
     N_("\
        --no-hsts                   disable HSTS\n"),
     N_("\
@@ -1791,10 +1780,10 @@ outputting to a regular file.\n"));
               opt.follow_ftp = old_follow_ftp;
             }
           else
-	    {
-	      retrieve_url (url_parsed, *t, &filename, &redirected_URL, NULL,
-			    &dt, opt.recursive, iri, true);
-	    }
+            {
+              retrieve_url (url_parsed, *t, &filename, &redirected_URL, NULL,
+                            &dt, opt.recursive, iri, true);
+            }
 
           if (opt.delete_after && filename != NULL && file_exists_p (filename))
             {

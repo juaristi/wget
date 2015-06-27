@@ -195,7 +195,7 @@ static const struct {
   { "glob",             &opt.ftp_glob,          cmd_boolean },
   { "header",           NULL,                   cmd_spec_header },
 #ifdef HAVE_HSTS
-  { "hsts",		&opt.hsts,		cmd_boolean },
+  { "hsts",             &opt.hsts,              cmd_boolean },
   { "hsts-file",        &opt.hsts_file,         cmd_file },
 #endif
   { "htmlextension",    &opt.adjust_extension,  cmd_boolean }, /* deprecated */

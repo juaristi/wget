@@ -265,65 +265,19 @@ hsts_store_merge (hsts_store_t store,
 }
 
 static bool
-hsts_parse_line (const char *line,
-                 char **host, int *port,
-                 time_t *created, time_t *max_age,
-                 bool *include_subdomains)
-{
-  bool result = false;
-  int items_read = 0;
-
-  char hostname[256];
-  char *port_st = NULL, *tail = NULL;
-  int myport = 0;
-  char my_incl_subdomains = 0;
-  time_t my_created = 0, my_max_age = 0;
-
-  hostname[0] = 0;
-
-  /* read hostname */
-  items_read = sscanf (line, "%255s\t%c\t%lu\t%lu",
-                       hostname,
-                       &my_incl_subdomains,
-                       (unsigned long *) &my_created,
-                       (unsigned long *) &my_max_age);
-
-  /* attempt to extract port number */
-  port_st = strchr (hostname, ':');
-  if (port_st)
-    myport = strtol (port_st + 1, &tail, 10);
-
-  if (items_read == 4)
-    {
-      if (hostname[0] && host)
-        *host = (port_st ? strdupdelim (hostname, port_st) : xstrdup (hostname));
-
-      if (myport && !*tail)
-        SETPARAM (port, myport);
-
-      SETPARAM (created, my_created);
-      SETPARAM (max_age, my_max_age);
-      SETPARAM (include_subdomains, (my_incl_subdomains == '1' ? true : false));
-
-      result = true;
-    }
-
-  return result;
-}
-
-static bool
 hsts_read_database (hsts_store_t store, const char *file, bool merge_with_existing_entries)
 {
   FILE *fp = NULL;
-  char *line = NULL;
+  char *line = NULL, *p;
   size_t len = 0;
+  int items_read;
   bool result = false;
   bool (*func)(hsts_store_t, const char *, int, time_t, time_t, bool);
 
-  char *host = NULL;
-  int port = 0;
-  time_t created = 0, max_age = 0;
-  bool include_subdomains = false;
+  char host[256];
+  int port;
+  time_t created, max_age;
+  int include_subdomains;
 
   func = (merge_with_existing_entries ? hsts_store_merge : hsts_new_entry);
 
@@ -332,22 +286,26 @@ hsts_read_database (hsts_store_t store, const char *file, bool merge_with_existi
     {
       while (getline (&line, &len, fp) > 0)
         {
-          if (line[0] != '#')
-            {
-              if (hsts_parse_line (line, &host, &port, &created, &max_age, &include_subdomains) &&
-                  host && created && max_age)
-                {
-                  func (store, host, port, created, max_age, include_subdomains);
-                  xfree (host);
-                  port = 0;
-                  created = 0;
-                  max_age = 0;
-                  include_subdomains = false;
-                }
-            }
-          xfree (line);
+          for (p = line; c_isspace (*p); p++)
+            ;
+
+          if (*p == '#')
+            continue;
+
+          items_read = sscanf (p, "%255s %d %d %lu %lu",
+                               host,
+                               &port,
+                               &include_subdomains,
+                               (unsigned long *) &created,
+                               (unsigned long *) &max_age);
+
+          if (items_read == 5)
+            func (store, host, port, created, max_age, !!include_subdomains);
         }
+
+      xfree (line);
       fclose (fp);
+
       result = true;
     }
 
@@ -357,12 +315,8 @@ hsts_read_database (hsts_store_t store, const char *file, bool merge_with_existi
 static void
 hsts_store_dump (hsts_store_t store, const char *filename)
 {
-  int written = 0;
-  char *tmp = NULL;
   FILE *fp = NULL;
   hash_table_iterator it;
-  struct hsts_kh *kh = NULL;
-  struct hsts_kh_info *khi = NULL;
 
   fp = fopen (filename, "w");
   if (fp)
@@ -373,48 +327,19 @@ hsts_store_dump (hsts_store_t store, const char *filename)
       fputs ("# <hostname>[:<port>]\t<incl. subdomains>\t<created>\t<max-age>\n", fp);
 
       /* Now cycle through the HSTS store in memory and dump the entries */
-      for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it) && (written >= 0);)
-      {
-        kh = (struct hsts_kh *) it.key;
-        khi = (struct hsts_kh_info *) it.value;
+      for (hash_table_iterate (store->store, &it); hash_table_iter_next (&it);)
+        {
+          struct hsts_kh *kh = (struct hsts_kh *) it.key;
+          struct hsts_kh_info *khi = (struct hsts_kh_info *) it.value;
 
-        /* print hostname */
-        written |= fputs (kh->host, fp);
-
-        if (kh->explicit_port != 0)
-          {
-            tmp = aprintf ("%i", kh->explicit_port);
-            if (tmp)
-              {
-                written |= fputc (':', fp);
-                written |= fputs (tmp, fp);
-              }
-            free (tmp);
-          }
-
-        written |= fputc (SEPARATOR, fp);
-
-        /* print include subdomains flag */
-        written |= fputc ((khi->include_subdomains ? '1' : '0'), fp);
-        written |= fputc (SEPARATOR, fp);
-
-        /* print creation time */
-        tmp = aprintf ("%lu", khi->created);
-        written |= fputs (tmp, fp);
-        free (tmp);
-
-        written |= fputc (SEPARATOR, fp);
-
-        /* print max-age */
-        tmp = aprintf ("%lu", khi->max_age);
-        written |= fputs (tmp, fp);
-        free (tmp);
-
-        written |= fputc ('\n', fp);
-      }
-
-      if (written < 0)
-        logprintf (LOG_ALWAYS, "Could not write the HSTS database correctly.\n");
+          if (fprintf (fp, "%s\t%d\t%d\t%lu\t%lu\n",
+                       kh->host, kh->explicit_port, khi->include_subdomains,
+                       khi->created, khi->max_age) < 0)
+            {
+              logprintf (LOG_ALWAYS, "Could not write the HSTS database correctly.\n");
+              break;
+            }
+        }
 
       fclose (fp);
     }
@@ -572,7 +497,7 @@ hsts_store_save (hsts_store_t store, const char *filename)
 {
   struct stat st;
 
-  if (hash_table_count (store->store) > 0)
+  if (filename && hash_table_count (store->store) > 0)
     {
       /* If the file has changed, merge the changes with our in-memory data
          before dumping them to the file.
@@ -791,9 +716,9 @@ test_hsts_read_database (void)
       if (fp)
         {
           fputs ("# dummy comment\n", fp);
-          fputs ("foo.example.com\t1\t1434224817\t123123123\n", fp);
-          fputs ("bar.example.com\t0\t1434224817\t456456456\n", fp);
-          fputs ("test.example.com:8080\t0\t1434224817\t789789789\n", fp);
+          fputs ("foo.example.com\t0\t1\t1434224817\t123123123\n", fp);
+          fputs ("bar.example.com\t0\t0\t1434224817\t456456456\n", fp);
+          fputs ("test.example.com\t8080\t0\t1434224817\t789789789\n", fp);
           fclose (fp);
 
           store = hsts_store_open (file);
