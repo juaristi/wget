@@ -35,16 +35,22 @@ as that of the covered work.  */
 #include "host.h" /* for is_valid_ip_address() */
 #include "init.h" /* for home_dir() */
 #include "utils.h"
+#include "hash.h"
+#include "c-ctype.h"
 #ifdef TESTING
 #include "test.h"
 #include <unistd.h> /* for unlink(), used only in tests */
 #endif
-#include "c-ctype.h"
 
 #include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
 #include <string.h>
+
+struct hsts_store {
+  struct hash_table *store;
+  time_t last_mtime;
+};
 
 struct hsts_kh {
   char *host;

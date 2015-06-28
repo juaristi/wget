@@ -801,6 +801,8 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
       || (proxy_url && proxy_url->scheme == SCHEME_HTTP))
     {
 #ifdef HAVE_HSTS
+      extern hsts_store_t hsts_store;
+
       if (opt.hsts && hsts_store)
 	{
 	  if (hsts_match (hsts_store, u))

@@ -36,12 +36,7 @@ as that of the covered work.  */
 #define HSTS_H
 
 #include "url.h"
-#include "hash.h"
 
-struct hsts_store {
-  struct hash_table *store;
-  time_t last_mtime;
-};
 typedef struct hsts_store *hsts_store_t;
 
 hsts_store_t hsts_store_open (const char *);
@@ -54,7 +49,5 @@ bool hsts_store_entry (hsts_store_t,
                        time_t, bool);
 bool hsts_match (hsts_store_t, struct url *);
 
-/* make the HSTS store global */
-hsts_store_t hsts_store;
 #endif /* HSTS_H */
 #endif /* HAVE_HSTS */
