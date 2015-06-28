@@ -548,7 +548,7 @@ hsts_store_close (hsts_store_t store)
   } while (0)
 
 static char *
-get_hsts_store_filename ()
+get_hsts_store_filename (void)
 {
   char *home = NULL, *filename = NULL;
   FILE *fp = NULL;
@@ -566,7 +566,7 @@ get_hsts_store_filename ()
 }
 
 static hsts_store_t
-open_hsts_test_store ()
+open_hsts_test_store (void)
 {
   char *filename = NULL;
   hsts_store_t store = NULL;
@@ -578,8 +578,8 @@ open_hsts_test_store ()
   return store;
 }
 
-static hsts_store_t
-close_hsts_test_store ()
+static void
+close_hsts_test_store (void)
 {
   char *filename = NULL;
 
@@ -588,7 +588,7 @@ close_hsts_test_store ()
   xfree (filename);
 }
 
-static char*
+static const char*
 test_url_rewrite (hsts_store_t s, const char *url, int port, bool rewrite)
 {
   bool result;

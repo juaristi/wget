@@ -801,7 +801,12 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
       || (proxy_url && proxy_url->scheme == SCHEME_HTTP))
     {
 #ifdef HAVE_HSTS
+#ifdef TESTING
+      /* we don't link against main.o when we're testing */
+      hsts_store_t hsts_store = NULL;
+#else
       extern hsts_store_t hsts_store;
+#endif
 
       if (opt.hsts && hsts_store)
 	{

@@ -2527,7 +2527,12 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   int err;
   uerr_t retval;
 #ifdef HAVE_HSTS
+#ifdef TESTING
+  /* we don't link against main.o when we're testing */
+  hsts_store_t hsts_store = NULL;
+#else
   extern hsts_store_t hsts_store;
+#endif
   const char *hsts_params;
   time_t max_age;
   bool include_subdomains;
