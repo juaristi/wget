@@ -53,6 +53,7 @@ class BaseTest:
         self.urls = []
 
         self.tests_passed = True
+        self.ready = False
         self.init_test_env()
 
         self.ret_code = 0

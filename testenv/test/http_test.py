@@ -27,11 +27,24 @@ class HTTPTest(BaseTest):
                                        protocols,
                                        req_protocols,
 									   port)
+
+    def setup(self):
+        self.server_setup()
+        self.ready = True
+
+    def begin(self):
+        if not self.ready:
+            # this is to maintain compatibility with scripts that
+            # don't call setup()
+            self.setup()
         with self:
             # if any exception occurs, self.__exit__ will be immediately called
-            self.server_setup()
-            self.do_test()
-            print_green('Test Passed.')
+            if self.ready:
+                self.do_test()
+                print_green("Test Passed.")
+            else:
+                self.tests_passed = False
+            super(HTTPTest, self).begin()
 
     def instantiate_server_by(self, protocol):
         addr = None
