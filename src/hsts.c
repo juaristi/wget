@@ -370,24 +370,28 @@ hsts_match (hsts_store_t store, struct url *u)
   enum hsts_kh_match match = NO_MATCH;
   int port = MAKE_EXPLICIT_PORT (u->scheme, u->port);
 
-  entry = hsts_find_entry (store, u->host, port, &match, kh);
-  if (entry)
+  /* avoid doing any computation if we're already in HTTPS */
+  if (!hsts_is_scheme_valid (u->scheme))
     {
-      if ((entry->created + entry->max_age) >= time(NULL))
+      entry = hsts_find_entry (store, u->host, port, &match, kh);
+      if (entry)
         {
-          if ((match == CONGRUENT_MATCH) ||
-              (match == SUPERDOMAIN_MATCH && entry->include_subdomains))
+          if ((entry->created + entry->max_age) >= time(NULL))
             {
-              /* we found a matching Known HSTS Host
-                 rewrite the URL */
-              u->scheme = SCHEME_HTTPS;
-              if (u->port == 80)
-                u->port = 443;
-              url_changed = true;
+              if ((match == CONGRUENT_MATCH) ||
+                  (match == SUPERDOMAIN_MATCH && entry->include_subdomains))
+                {
+                  /* we found a matching Known HSTS Host
+                     rewrite the URL */
+                  u->scheme = SCHEME_HTTPS;
+                  if (u->port == 80)
+                    u->port = 443;
+                  url_changed = true;
+                }
             }
+          else
+            hsts_remove_entry (store, kh);
         }
-      else
-        hsts_remove_entry (store, kh);
     }
 
   xfree(kh);
