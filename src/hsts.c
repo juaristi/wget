@@ -477,12 +477,12 @@ hsts_store_open (const char *filename)
   hsts_store_t store = NULL;
   struct stat st;
 
+  store = xnew0 (hsts_store_t);
+  store->store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
+  store->last_mtime = 0;
+
   if (file_exists_p (filename))
     {
-      store = xnew0 (hsts_store_t);
-      store->store = hash_table_new (0, hsts_hash_func, hsts_cmp_func);
-      store->last_mtime = 0;
-
       if (stat (filename, &st) == 0)
         store->last_mtime = st.st_mtime;
 
@@ -509,7 +509,7 @@ hsts_store_save (hsts_store_t store, const char *filename)
          before dumping them to the file.
          Otherwise we could potentially overwrite the data stored by other Wget processes.
        */
-      if (stat (filename, &st) == 0 && store->last_mtime && st.st_mtime > store->last_mtime)
+      if (store->last_mtime && stat (filename, &st) == 0 && st.st_mtime > store->last_mtime)
         hsts_read_database (store, filename, true);
 
       /* now dump to the file */
