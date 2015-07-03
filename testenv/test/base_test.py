@@ -44,6 +44,7 @@ class BaseTest:
         self.servers = []
         self.domains = []
 
+        self.addr = None
         if port is None:
             self.port = -1
         else:
@@ -73,9 +74,11 @@ class BaseTest:
     def get_domain_addr(self, addr):
         # TODO if there's a multiple number of ports, wouldn't it be
         # overridden to the port of the last invocation?
-        self.port = str(addr[1])
+        self.addr = str(addr[0])
+        if self.port == -1:
+            self.port = str(addr[1])
 
-        return '%s:%s' % (addr[0], self.port)
+        return '%s:%s' % (self.addr, self.port)
 
     def server_setup(self):
         print_blue("Running Test %s" % self.name)
