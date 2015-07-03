@@ -43,6 +43,7 @@ class BaseTest:
 
         self.servers = []
         self.domains = []
+        self.ports = []
 
         self.addr = None
         if port is None:
@@ -78,7 +79,7 @@ class BaseTest:
         if self.port == -1:
             self.port = str(addr[1])
 
-        return '%s:%s' % (self.addr, self.port)
+        return [self.addr, self.port]
 
     def server_setup(self):
         print_blue("Running Test %s" % self.name)
@@ -90,7 +91,8 @@ class BaseTest:
             # ports and etc.
             # so we should record different domains respect to servers.
             domain = self.get_domain_addr(instance.server_address)
-            self.domains.append(domain)
+            self.domains.append(domain[0])
+            self.ports.append(domain[1])
 
     def exec_wget(self):
         cmd_line = self.gen_cmd_line()
@@ -135,9 +137,10 @@ class BaseTest:
         else:
             cmd_line = '%s %s ' % (wget_path, wget_options)
 
-        for req_protocol, urls, domain in zip(self.req_protocols,
-                                                        self.urls,
-                                                        self.domains):
+        for req_protocol, urls, domain, port in zip(self.req_protocols,
+                                                    self.urls,
+                                                    self.domains,
+                                                    self.ports):
             # zip is function for iterating multiple lists at the same time.
             # e.g. for item1, item2 in zip([1, 5, 3],
             #                              ['a', 'e', 'c']):
@@ -147,7 +150,8 @@ class BaseTest:
             # 5 e
             # 3 c
             for url in urls:
-                cmd_line += '%s://%s/%s ' % (req_protocol, domain, url)
+                cmd_line += '%s://%s:%s/%s ' % (req_protocol, domain, port, url)
+
 
         print(cmd_line)
 
