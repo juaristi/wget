@@ -14,6 +14,7 @@
 /configure
 /lib/
 /maint.mk
+.gitignore
 # Wildcard Ignores
 *~
 po/*.gmo*
@@ -81,6 +82,7 @@ testenv/server/http/__pycache__/
 testenv/test/__pycache__/
 testenv/Makefile
 testenv/Makefile.in
+testenv/**/*.pyc
 # tests/
 tests/Makefile
 tests/Makefile.in
