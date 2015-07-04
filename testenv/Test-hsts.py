@@ -23,7 +23,7 @@ def create_hsts_database(path, host, port):
     
     f.write("# dummy comment\n")
     f.write(host + "\t" + str(port) + "\t0\t" + str(curtime) + "\t" + max_age + "\n")
-    f.close
+    f.close()
 
 TEST_NAME = "HSTS basic test"
 
