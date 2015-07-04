@@ -11,10 +11,11 @@ This test makes sure Wget can parse a given HSTS database and apply the indicate
 """
 def hsts_database_path():
     hsts_file = ".wget-hsts-testenv"
-    path = os.path.abspath(hsts_file)
-    return path
+    return os.path.abspath(hsts_file)
 
 def create_hsts_database(path, host, port):
+    # we want the current time as an integer,
+    # not as a floating point
     curtime = int(time.time())
     max_age = "123456"
     
@@ -32,7 +33,9 @@ File = WgetFile(File_Name, File_Content)
 
 Hsts_File_Path = hsts_database_path()
 
-WGET_OPTIONS = "--hsts-file=" + Hsts_File_Path
+CAFILE = os.path.abspath(os.path.join(os.getenv('srcdir', '.'), 'certs', 'ca-cert.pem'))
+
+WGET_OPTIONS = "--hsts-file=" + Hsts_File_Path + " --ca-certificate=" + CAFILE
 WGET_URLS = [[File_Name]]
 
 Files = [[File]]
@@ -63,10 +66,13 @@ test = HTTPTest(
         protocols = Servers,
         req_protocols = Requests
 )
+
+# start the web server and create the temporary HSTS database
 test.setup()
-addr = test.addr
-port = test.port
-print("Server listening at %s:%s..." % (addr, port))
-create_hsts_database(Hsts_File_Path, 'localhost', port)
+create_hsts_database(Hsts_File_Path, 'localhost', test.port)
+
 err = test.begin()
+
+# remove the temporary HSTS database
+os.unlink(hsts_database_path())
 exit(err)
