@@ -38,7 +38,9 @@ class HTTPTest(BaseTest):
             # don't call setup()
             self.setup()
         with self:
-            # if any exception occurs, self.__exit__ will be immediately called
+            # If any exception occurs, self.__exit__ will be immediately called.
+            # We must call the parent method in the end in order to verify
+            # whether the tests succeeded or not.
             if self.ready:
                 self.do_test()
                 print_green("Test Passed.")
