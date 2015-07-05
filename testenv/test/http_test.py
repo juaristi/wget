@@ -18,15 +18,13 @@ class HTTPTest(BaseTest):
                  test_params=None,
                  post_hook=None,
                  protocols=(HTTP,),
-                 req_protocols=None,
-				 port=None):
+                 req_protocols=None):
         super(HTTPTest, self).__init__(name,
                                        pre_hook,
                                        test_params,
                                        post_hook,
                                        protocols,
-                                       req_protocols,
-									   port)
+                                       req_protocols)
 
     def setup(self):
         self.server_setup()
@@ -49,11 +47,8 @@ class HTTPTest(BaseTest):
             super(HTTPTest, self).begin()
 
     def instantiate_server_by(self, protocol):
-        addr = None
-        if self.port > 0:
-            addr = ('localhost', self.port)
         server = {HTTP: HTTPd,
-                  HTTPS: HTTPSd}[protocol](addr)
+                  HTTPS: HTTPSd}[protocol]()
         server.start()
 
         return server

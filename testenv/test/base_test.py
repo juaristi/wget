@@ -22,7 +22,7 @@ class BaseTest:
         * instantiate_server_by(protocol)
     """
 
-    def __init__(self, name, pre_hook, test_params, post_hook, protocols, req_protocols, port):
+    def __init__(self, name, pre_hook, test_params, post_hook, protocols, req_protocols):
         """
         Define the class-wide variables (or attributes).
         Attributes should not be defined outside __init__.
@@ -46,10 +46,7 @@ class BaseTest:
         self.ports = []
 
         self.addr = None
-        if port is None:
-            self.port = -1
-        else:
-            self.port = port
+        self.port = -1
 
         self.wget_options = ''
         self.urls = []
@@ -75,9 +72,10 @@ class BaseTest:
     def get_domain_addr(self, addr):
         # TODO if there's a multiple number of ports, wouldn't it be
         # overridden to the port of the last invocation?
+        # Set the instance variables 'addr' and 'port' so that
+        # they can be queried by test cases.
         self.addr = str(addr[0])
-        if self.port == -1:
-            self.port = str(addr[1])
+        self.port = str(addr[1])
 
         return [self.addr, self.port]
 
