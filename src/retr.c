@@ -802,7 +802,10 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
       result = http_loop (u, orig_parsed, &mynewloc, &local_file, refurl, dt,
                           proxy_url, iri);
     }
-  else if (u->scheme == SCHEME_FTP)
+  else if (u->scheme == SCHEME_FTP
+#ifdef HAVE_SSL
+      || u->scheme == SCHEME_FTPS)
+#endif
     {
       /* If this is a redirection, temporarily turn off opt.ftp_glob
          and opt.recursive, both being undesirable when following
