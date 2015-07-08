@@ -53,8 +53,9 @@ as that of the covered work.  */
 /* Given a string containing "charset=XXX", return the encoding if found,
    or NULL otherwise */
 char *
-parse_charset (char *str)
+parse_charset (const char *str)
 {
+  const char *end;
   char *charset;
 
   if (!str || !*str)
@@ -65,14 +66,14 @@ parse_charset (char *str)
     return NULL;
 
   str += 8;
-  charset = str;
+  end = str;
 
   /* sXXXav: which chars should be banned ??? */
-  while (*charset && !c_isspace (*charset))
-    charset++;
+  while (*end && !c_isspace (*end))
+    end++;
 
   /* sXXXav: could strdupdelim return NULL ? */
-  charset = strdupdelim (str, charset);
+  charset = strdupdelim (str, end);
 
   /* Do a minimum check on the charset value */
   if (!check_encoding_name (charset))
@@ -95,9 +96,9 @@ find_locale (void)
 
 /* Basic check of an encoding name. */
 bool
-check_encoding_name (char *encoding)
+check_encoding_name (const char *encoding)
 {
-  char *s = encoding;
+  const char *s = encoding;
 
   while (*s)
     {
@@ -136,7 +137,7 @@ do_conversion (const char *tocode, const char *fromcode, char const *in_org, siz
 
   /* iconv() has to work on an unescaped string */
   in_save = in = xstrndup (in_org, inlen);
-  url_unescape(in);
+  url_unescape_except_reserved (in);
   inlen = strlen(in);
 
   len = outlen = inlen * 2;
@@ -219,10 +220,54 @@ locale_to_utf8 (const char *str)
   return str;
 }
 
+/*
+ * Work around a libidn <= 1.30 vulnerability.
+ *
+ * The function checks for a valid UTF-8 character sequence before
+ * passing it to idna_to_ascii_8z().
+ *
+ * [1] http://lists.gnu.org/archive/html/help-libidn/2015-05/msg00002.html
+ * [2] https://lists.gnu.org/archive/html/bug-wget/2015-06/msg00002.html
+ * [3] http://curl.haxx.se/mail/lib-2015-06/0143.html
+ */
+static bool
+_utf8_is_valid(const char *utf8)
+{
+  const unsigned char *s = (const unsigned char *) utf8;
+
+  while (*s)
+    {
+      if ((*s & 0x80) == 0) /* 0xxxxxxx ASCII char */
+        s++;
+      else if ((*s & 0xE0) == 0xC0) /* 110xxxxx 10xxxxxx */
+        {
+          if ((s[1] & 0xC0) != 0x80)
+            return false;
+          s+=2;
+        }
+      else if ((*s & 0xF0) == 0xE0) /* 1110xxxx 10xxxxxx 10xxxxxx */
+        {
+          if ((s[1] & 0xC0) != 0x80 || (s[2] & 0xC0) != 0x80)
+            return false;
+          s+=3;
+        }
+      else if ((*s & 0xF8) == 0xF0) /* 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx */
+        {
+          if ((s[1] & 0xC0) != 0x80 || (s[2] & 0xC0) != 0x80 || (s[3] & 0xC0) != 0x80)
+            return false;
+          s+=4;
+        }
+      else
+        return false;
+    }
+
+  return true;
+}
+
 /* Try to "ASCII encode" UTF-8 host. Return the new domain on success or NULL
    on error. */
 char *
-idn_encode (struct iri *i, char *host)
+idn_encode (const struct iri *i, const char *host)
 {
   int ret;
   char *ascii_encoded;
@@ -233,6 +278,14 @@ idn_encode (struct iri *i, char *host)
     {
       if (!remote_to_utf8 (i, host, &utf8_encoded))
           return NULL;  /* Nothing to encode or an error occured */
+    }
+
+  if (!_utf8_is_valid(utf8_encoded ? utf8_encoded : host))
+    {
+      logprintf (LOG_VERBOSE, _("Invalid UTF-8 sequence: %s\n"),
+                 quote(utf8_encoded ? utf8_encoded : host));
+      xfree (utf8_encoded);
+      return NULL;
     }
 
   /* Store in ascii_encoded the ASCII UTF-8 NULL terminated string */
@@ -252,7 +305,7 @@ idn_encode (struct iri *i, char *host)
 /* Try to decode an "ASCII encoded" host. Return the new domain in the locale
    on success or NULL on error. */
 char *
-idn_decode (char *host)
+idn_decode (const char *host)
 {
   char *new;
   int ret;
@@ -271,7 +324,7 @@ idn_decode (char *host)
 /* Try to transcode string str from remote encoding to UTF-8. On success, *new
    contains the transcoded string. *new content is unspecified otherwise. */
 bool
-remote_to_utf8 (struct iri *iri, const char *str, char **new)
+remote_to_utf8 (const struct iri *iri, const char *str, char **new)
 {
   bool ret = false;
 
@@ -345,7 +398,7 @@ iri_free (struct iri *i)
 /* Set uri_encoding of struct iri i. If a remote encoding was specified, use
    it unless force is true. */
 void
-set_uri_encoding (struct iri *i, char *charset, bool force)
+set_uri_encoding (struct iri *i, const char *charset, bool force)
 {
   DEBUGP (("URI encoding = %s\n", charset ? quote (charset) : "None"));
   if (!force && opt.encoding_remote)
@@ -362,7 +415,7 @@ set_uri_encoding (struct iri *i, char *charset, bool force)
 
 /* Set content_encoding of struct iri i. */
 void
-set_content_encoding (struct iri *i, char *charset)
+set_content_encoding (struct iri *i, const char *charset)
 {
   DEBUGP (("URI content encoding = %s\n", charset ? quote (charset) : "None"));
   if (opt.encoding_remote)
