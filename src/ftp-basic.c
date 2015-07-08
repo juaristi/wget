@@ -422,6 +422,102 @@ ip_address_to_eprt_repr (const ip_address *addr, int port, char *buf,
   buf[buflen - 1] = '\0';
 }
 
+uerr_t
+ftp_auth (int csock, url_scheme scheme)
+{
+  uerr_t err = 0;
+  int written = 0;
+  char *request = NULL, *response = NULL;
+
+  if (scheme == SCHEME_FTPS)
+    {
+      request = ftp_request ("AUTH", "TLS");
+      written = fd_write (csock, request, strlen (request), -1);
+      if (written < 0)
+        {
+          err = WRITEFAILED;
+          goto bail;
+        }
+      err = ftp_response (csock, &response);
+      if (err != FTPOK)
+        goto bail;
+      if (*response != '2')
+        err = FTPNOAUTH;
+    }
+  else
+    err = FTPNOAUTH;
+
+bail:
+  if (request)
+    xfree (request);
+  if (response)
+    xfree (response);
+
+  return err;
+}
+
+uerr_t
+ftp_pbsz (int csock, int pbsz)
+{
+  uerr_t err = 0;
+  int written = 0;
+  char spbsz[5];
+  char *request = NULL, *response = NULL;
+
+  snprintf (spbsz, 5, "%d", pbsz);
+  request = ftp_request ("PBSZ", spbsz);
+  written = fd_write (csock, request, strlen (request), -1);
+  if (written < 0)
+    {
+      err = WRITEFAILED;
+      goto bail;
+    }
+
+  err = ftp_response (csock, &response);
+  if (err != FTPOK)
+    goto bail;
+  if (*response != '2')
+    err = FTPNOPBSZ;
+
+bail:
+  if (request)
+    xfree (request);
+  if (response)
+    xfree (response);
+
+  return err;
+}
+
+uerr_t
+ftp_prot (int csock, char prot)
+{
+  uerr_t err = 0;
+  int written = 0;
+  char *request = NULL, *response = NULL;
+
+  request = ftp_request ("PROT", c_toupper (prot));
+  written = fd_write (csock, request, strlen (request), -1);
+  if (written < 0)
+    {
+      err = WRITEFAILED;
+      goto bail;
+    }
+
+  err = ftp_response (csock, &response);
+  if (err != FTPOK)
+    goto bail;
+  if (*response != '2')
+    err = FTPNOPROT;
+
+bail:
+  if (request)
+    xfree (request);
+  if (response)
+    xfree (response);
+
+  return err;
+}
+
 /* Bind a port and send the appropriate PORT command to the FTP
    server.  Use acceptport after RETR, to get the socket of data
    connection.  */
