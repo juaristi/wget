@@ -261,6 +261,11 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
   char type_char;
   bool try_again;
   bool list_a_used = false;
+#ifdef HAVE_SSL
+  /* this variable tells whether the target server
+   * accepts the security extensions (RFC 2228) or not */
+  bool using_security = false;
+#endif
 
   assert (con != NULL);
   assert (con->target != NULL);
@@ -308,6 +313,21 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
         con->csock = csock;
       else
         con->csock = -1;
+
+#ifdef HAVE_SSL
+      if (u->scheme == SCHEME_FTPS)
+        {
+          /* Send an AUTH sequence before,
+           * and initialize the SSL layer if accepted by server
+           */
+          if (ftp_auth (csock, SCHEME_FTPS) == FTPOK)
+            {
+              /* Initialize SSL */
+              /* The server accepted our AUTH command */
+              using_security = true;
+            }
+        }
+#endif
 
       /* Second: Login with proper USER/PASS sequence.  */
       logprintf (LOG_VERBOSE, _("Logging in as %s ... "),
@@ -366,6 +386,24 @@ Error in server response, closing control connection.\n"));
         default:
           abort ();
         }
+
+#ifdef HAVE_SSL
+      /* Most FTP clients will typically send PBSZ and PROT in the very beginning,
+       * even though they're not needed until a data connection is opened, which may not
+       * even happen at all.
+       */
+      if (using_security)
+        {
+          /* Send the PBSZ and PROT commands, in that order */
+          if (u->scheme == SCHEME_FTPS)
+            {
+              ftp_pbsz (csock, 0);
+              ftp_prot (csock, PROT_PRIVATE);
+              /* TODO check the return values here */
+            }
+        }
+#endif
+
       /* Third: Get the system type */
       if (!opt.server_response)
         logprintf (LOG_VERBOSE, "==> SYST ... ");
