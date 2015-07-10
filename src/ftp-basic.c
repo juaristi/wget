@@ -422,8 +422,25 @@ ip_address_to_eprt_repr (const ip_address *addr, int port, char *buf,
   buf[buflen - 1] = '\0';
 }
 
+#ifdef HAVE_SSL
+/*
+ * The following three functions defined into this #ifdef block
+ * wrap the extended FTP commands defined in RFC 2228 (FTP Security Extensions).
+ * Currently, only FTPS is supported, so these functions are only compiled when SSL
+ * support is available, because there's no point in using FTPS when there's no SSL.
+ * Shall someone add new secure FTP protocols in the future, feel free to remove this
+ * #ifdef, or add new constants to it.
+ */
+
+/*
+ * Sends an AUTH command as defined by RFC 2228,
+ * deriving its argument from the scheme. For example, if the provided scheme
+ * is SCHEME_FTPS, the command sent will be "AUTH TLS". Currently, this is the only
+ * scheme supported, so this function will return FTPNOAUTH when supplied a different
+ * one. It will also return FTPNOAUTH if the target server does not support FTPS.
+ */
 uerr_t
-ftp_auth (int csock, url_scheme scheme)
+ftp_auth (int csock, enum url_scheme scheme)
 {
   uerr_t err = 0;
   int written = 0;
@@ -489,13 +506,15 @@ bail:
 }
 
 uerr_t
-ftp_prot (int csock, char prot)
+ftp_prot (int csock, enum prot_level prot)
 {
   uerr_t err = 0;
   int written = 0;
   char *request = NULL, *response = NULL;
+  /* value must be a single character value */
+  char value = prot;
 
-  request = ftp_request ("PROT", c_toupper (prot));
+  request = ftp_request ("PROT", &value);
   written = fd_write (csock, request, strlen (request), -1);
   if (written < 0)
     {
@@ -517,6 +536,7 @@ bail:
 
   return err;
 }
+#endif
 
 /* Bind a port and send the appropriate PORT command to the FTP
    server.  Use acceptport after RETR, to get the socket of data

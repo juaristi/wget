@@ -33,6 +33,7 @@ as that of the covered work.  */
 #define FTP_H
 
 #include "host.h"
+#include "url.h"
 
 /* System types. */
 enum stype
@@ -53,10 +54,24 @@ enum ustype
   UST_OTHER
 };
 
+/* Data channel protection levels (to be used with PBSZ) */
+enum prot_level
+{
+  PROT_CLEAR = 'C',
+  PROT_SAFE = 'S',
+  PROT_CONFIDENTIAL = 'E',
+  PROT_PRIVATE = 'P'
+};
+
 uerr_t ftp_response (int, char **);
 uerr_t ftp_login (int, const char *, const char *);
 uerr_t ftp_port (int, int *);
 uerr_t ftp_pasv (int, ip_address *, int *);
+#ifdef HAVE_SSL
+uerr_t ftp_auth (int, enum url_scheme);
+uerr_t ftp_pbsz (int, int);
+uerr_t ftp_prot (int, enum prot_level);
+#endif
 #ifdef ENABLE_IPV6
 uerr_t ftp_lprt (int, int *);
 uerr_t ftp_lpsv (int, ip_address *, int *);
