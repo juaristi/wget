@@ -79,7 +79,7 @@ static struct scheme_data supported_schemes[] =
 #endif
   { "ftp",      "ftp://",   DEFAULT_FTP_PORT,   scm_has_params|scm_has_fragment },
 #ifdef HAVE_SSL
-  { "ftps",     "ftps://",  DEFAULT_FTPS_PORT, scm_has_params|scm_has_fragment },
+  { "ftps",     "ftps://",  DEFAULT_FTPS_PORT,  scm_has_params|scm_has_fragment },
 #endif
 
   /* SCHEME_INVALID */
