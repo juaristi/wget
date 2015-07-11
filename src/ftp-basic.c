@@ -135,6 +135,23 @@ ftp_request (const char *command, const char *value)
   return res;
 }
 
+uerr_t
+ftp_greeting (int csock)
+{
+  uerr_t err = FTPOK;
+  char *response = NULL;
+
+  err = ftp_response (csock, &response);
+  if (err != FTPOK)
+    goto bail;
+  if (*response != '2')
+    err = FTPSRVERR;
+
+bail:
+  if (response)
+    xfree (response);
+  return err;
+}
 /* Sends the USER and PASS commands to the server, to control
    connection socket csock.  */
 uerr_t
@@ -144,16 +161,6 @@ ftp_login (int csock, const char *acc, const char *pass)
   char *request, *respline;
   int nwritten;
 
-  /* Get greeting.  */
-  err = ftp_response (csock, &respline);
-  if (err != FTPOK)
-    return err;
-  if (*respline != '2')
-    {
-      xfree (respline);
-      return FTPSRVERR;
-    }
-  xfree (respline);
   /* Send USER username.  */
   request = ftp_request ("USER", acc);
   nwritten = fd_write (csock, request, strlen (request), -1);

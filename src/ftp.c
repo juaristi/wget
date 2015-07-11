@@ -330,6 +330,16 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
       else
         con->csock = -1;
 
+      /* Get the server's greeting */
+      err = ftp_greeting (csock);
+      if (err != FTPOK)
+        {
+          logputs (LOG_NOTQUIET, "Error in server response. Closing.\n");
+          fd_close (csock);
+          con->csock = -1;
+          return err;
+        }
+
 #ifdef HAVE_SSL
       if (u->scheme == SCHEME_FTPS)
         {

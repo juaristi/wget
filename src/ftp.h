@@ -64,6 +64,7 @@ enum prot_level
 };
 
 uerr_t ftp_response (int, char **);
+uerr_t ftp_greeting (int);
 uerr_t ftp_login (int, const char *, const char *);
 uerr_t ftp_port (int, int *);
 uerr_t ftp_pasv (int, ip_address *, int *);
