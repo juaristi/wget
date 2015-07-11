@@ -44,6 +44,7 @@ as that of the covered work.  */
 #include "url.h"
 #include "retr.h"
 #include "ftp.h"
+#include "ssl.h"
 #include "connect.h"
 #include "host.h"
 #include "netrc.h"
@@ -291,6 +292,21 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
   local_sock = -1;
   con->dltime = 0;
 
+#ifdef HAVE_SSL
+  if (u->scheme == SCHEME_FTPS)
+    {
+      /* Initialize SSL layer first */
+      if (!ssl_init ())
+        {
+          scheme_disable (SCHEME_FTPS);
+          logprintf (LOG_NOTQUIET,
+                     _("Could not initialize SSL. It will be disabled."));
+          err = SSLINITFAILED;
+          return err;
+        }
+    }
+#endif
+
   if (!(cmd & DO_LOGIN))
     csock = con->csock;
   else                          /* cmd & DO_LOGIN */
@@ -317,13 +333,22 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
 #ifdef HAVE_SSL
       if (u->scheme == SCHEME_FTPS)
         {
-          /* Send an AUTH sequence before,
-           * and initialize the SSL layer if accepted by server
+          /* Send an AUTH sequence before login,
+           * and perform the SSL handshake if accepted by server
            */
           if (ftp_auth (csock, SCHEME_FTPS) == FTPOK)
             {
-              /* Initialize SSL */
-              /* The server accepted our AUTH command */
+              if (!ssl_connect_wget (csock, u->host))
+                {
+                  fd_close (csock);
+                  return CONSSLERR;
+                }
+              else if (!ssl_check_certificate (csock, u->host))
+                {
+                  fd_close (csock);
+                  return VERIFCERTERR;
+                }
+
               using_security = true;
             }
         }
