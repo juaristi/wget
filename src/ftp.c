@@ -1384,15 +1384,22 @@ Error in server response, closing control connection.\n"));
 #ifdef HAVE_SSL
   if (u->scheme == SCHEME_FTPS && using_security)
     {
+      /* We should try to restore the existing SSL session in the data connection
+       * and fall back to establishing a new session if the server doesn't want to restore it.
+       */
       if (!ssl_connect_wget (dtsock, u->host, &csock))
         {
-          fd_close (csock);
-          fd_close (dtsock);
-          logputs (LOG_NOTQUIET, "Could not perform SSL handshake.\n");
-          return CONERROR;
+          logputs (LOG_NOTQUIET, "Server does not want to resume SSL session. Trying with a new one.\n");
+          if (!ssl_connect_wget (dtsock, u->host, NULL))
+            {
+              fd_close (csock);
+              fd_close (dtsock);
+              logputs (LOG_NOTQUIET, "Could not perform SSL handshake.\n");
+              return CONERROR;
+            }
         }
       else
-        logputs (LOG_NOTQUIET, "Performed SSL handshake\n");
+        logputs (LOG_NOTQUIET, "Continuing SSL session in data connection\n");
 
       if (!ssl_check_certificate (dtsock, u->host))
         {
@@ -1400,8 +1407,6 @@ Error in server response, closing control connection.\n"));
           fd_close (dtsock);
           return CONERROR;
         }
-      else
-        logputs (LOG_NOTQUIET, "Verified SSL cert\n");
     }
 #endif
 

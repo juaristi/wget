@@ -540,18 +540,16 @@ ssl_connect_wget (int fd, const char *hostname, int *continue_session)
   if (continue_session)
     {
       ctx = (struct wgnutls_transport_context *) fd_transport_context (*continue_session);
-      if (!gnutls_session_is_resumed (session) && ctx->session_data)
+      if (!gnutls_session_is_resumed (session))
         {
-          if (gnutls_session_set_data (session, ctx->session_data->data, ctx->session_data->size))
+          if (!ctx->session_data || gnutls_session_set_data (session, ctx->session_data->data, ctx->session_data->size))
             {
-              /* server does not want to continue the session, let's start a new one */
-              continue_session = NULL;
-
+              /* server does not want to continue the session */
               gnutls_free (ctx->session_data->data);
-              /*gnutls_free (ctx->session_data);*/
+              gnutls_free (ctx->session_data);
+              gnutls_deinit (session);
+              return false;
             }
-          else
-            logprintf (LOG_ALWAYS, "Continuing SSL session in socket %d\n", fd);
         }
       else
         {
@@ -646,10 +644,8 @@ ssl_connect_wget (int fd, const char *hostname, int *continue_session)
   if (gnutls_session_get_data2 (session, ctx->session_data))
     {
       xfree (ctx->session_data);
-      logprintf (LOG_ALWAYS, "Could not save SSL session data for socket %d\n", fd);
+      logprintf (LOG_ALWAYS, "WARNING: Could not save SSL session data for socket %d\n", fd);
     }
-  else
-    logprintf (LOG_ALWAYS, "Saved SSL session data for socket %d\n", fd);
   fd_register_transport (fd, &wgnutls_transport, ctx);
   return true;
 }
