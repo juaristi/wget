@@ -513,8 +513,9 @@ ssl_connect_with_timeout_callback(void *arg)
 
    Returns true on success, false on failure.  */
 
+/* TODO 'continue_session' is ignored */
 bool
-ssl_connect_wget (int fd, const char *hostname)
+ssl_connect_wget (int fd, const char *hostname, int *continue_session)
 {
   SSL *conn;
   struct scwt_context scwt_ctx;

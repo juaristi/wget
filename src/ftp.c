@@ -348,7 +348,7 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
            */
           if (ftp_auth (csock, SCHEME_FTPS) == FTPOK)
             {
-              if (!ssl_connect_wget (csock, u->host))
+              if (!ssl_connect_wget (csock, u->host, NULL))
                 {
                   fd_close (csock);
                   return CONSSLERR;
@@ -1380,6 +1380,30 @@ Error in server response, closing control connection.\n"));
     }
   else if (expected_bytes)
     print_length (expected_bytes, restval, false);
+
+#ifdef HAVE_SSL
+  if (u->scheme == SCHEME_FTPS && using_security)
+    {
+      if (!ssl_connect_wget (dtsock, u->host, &csock))
+        {
+          fd_close (csock);
+          fd_close (dtsock);
+          logputs (LOG_NOTQUIET, "Could not perform SSL handshake.\n");
+          return CONERROR;
+        }
+      else
+        logputs (LOG_NOTQUIET, "Performed SSL handshake\n");
+
+      if (!ssl_check_certificate (dtsock, u->host))
+        {
+          fd_close (csock);
+          fd_close (dtsock);
+          return CONERROR;
+        }
+      else
+        logputs (LOG_NOTQUIET, "Verified SSL cert\n");
+    }
+#endif
 
   /* Get the contents of the document.  */
   flags = 0;

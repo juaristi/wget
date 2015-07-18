@@ -2070,7 +2070,7 @@ establish_connection (struct url *u, struct url **conn_ref,
 
       if (conn->scheme == SCHEME_HTTPS)
         {
-          if (!ssl_connect_wget (sock, u->host))
+          if (!ssl_connect_wget (sock, u->host, NULL))
             {
               CLOSE_INVALIDATE (sock);
               return CONSSLERR;
