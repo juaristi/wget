@@ -804,8 +804,9 @@ retrieve_url (struct url * orig_parsed, const char *origurl, char **file,
     }
   else if (u->scheme == SCHEME_FTP
 #ifdef HAVE_SSL
-      || u->scheme == SCHEME_FTPS)
+      || u->scheme == SCHEME_FTPS
 #endif
+      )
     {
       /* If this is a redirection, temporarily turn off opt.ftp_glob
          and opt.recursive, both being undesirable when following
