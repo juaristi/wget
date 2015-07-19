@@ -1399,7 +1399,7 @@ Error in server response, closing control connection.\n"));
             }
         }
       else
-        logputs (LOG_NOTQUIET, "Continuing SSL session in data connection\n");
+        logputs (LOG_NOTQUIET, "Resuming SSL session in data connection\n");
 
       if (!ssl_check_certificate (dtsock, u->host))
         {
