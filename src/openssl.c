@@ -334,6 +334,7 @@ ssl_init (void)
 struct openssl_transport_context
 {
   SSL *conn;                    /* SSL connection handle */
+  SSL_SESSION *sess;            /* SSL session info */
   char *last_error;             /* last error printed with openssl_errstr */
 };
 
@@ -513,7 +514,6 @@ ssl_connect_with_timeout_callback(void *arg)
 
    Returns true on success, false on failure.  */
 
-/* TODO 'continue_session' is ignored */
 bool
 ssl_connect_wget (int fd, const char *hostname, int *continue_session)
 {
@@ -528,7 +528,7 @@ ssl_connect_wget (int fd, const char *hostname, int *continue_session)
   if (!conn)
     goto error;
 #if OPENSSL_VERSION_NUMBER >= 0x0090806fL && !defined(OPENSSL_NO_TLSEXT)
-  /* If the SSL library was build with support for ServerNameIndication
+  /* If the SSL library was built with support for ServerNameIndication
      then use it whenever we have a hostname.  If not, don't, ever. */
   if (! is_valid_ip_address (hostname))
     {
@@ -539,6 +539,14 @@ ssl_connect_wget (int fd, const char *hostname, int *continue_session)
         }
     }
 #endif
+
+  if (continue_session)
+    {
+      /* attempt to resume a previous SSL session */
+      ctx = (struct openssl_transport_context *) fd_transport_context (*continue_session);
+      if (!ctx || !ctx->sess || !SSL_set_session (conn, ctx->sess))
+        goto error;
+    }
 
 #ifndef FD_TO_SOCKET
 # define FD_TO_SOCKET(X) (X)
@@ -558,6 +566,9 @@ ssl_connect_wget (int fd, const char *hostname, int *continue_session)
 
   ctx = xnew0 (struct openssl_transport_context);
   ctx->conn = conn;
+  ctx->sess = SSL_get0_session (conn);
+  if (ctx->sess)
+    logprintf (LOG_NOTQUIET, "WARNING: Could not save SSL session data for socket %d\n", fd);
 
   /* Register FD with Wget's transport layer, i.e. arrange that our
      functions are used for reading, writing, and polling.  */
