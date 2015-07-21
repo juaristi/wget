@@ -79,7 +79,11 @@ static struct scheme_data supported_schemes[] =
 #endif
   { "ftp",      "ftp://",   DEFAULT_FTP_PORT,   scm_has_params|scm_has_fragment },
 #ifdef HAVE_SSL
-  { "ftps",     "ftps://",  DEFAULT_FTPS_PORT,  scm_has_params|scm_has_fragment },
+  /*
+   * Explicit FTPS uses the same port as FTP.
+   * Implicit FTPS has its own port (990), but it is disabled by default.
+   */
+  { "ftps",     "ftps://",  DEFAULT_FTP_PORT,  scm_has_params|scm_has_fragment },
 #endif
 
   /* SCHEME_INVALID */
