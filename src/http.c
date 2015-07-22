@@ -42,6 +42,7 @@ as that of the covered work.  */
 
 #include "hash.h"
 #include "http.h"
+#include "hsts.h"
 #include "utils.h"
 #include "url.h"
 #include "host.h"
@@ -61,6 +62,10 @@ as that of the covered work.  */
 #include "warc.h"
 #include "c-strcase.h"
 #include "version.h"
+#ifdef HAVE_METALINK
+# include "metalink.h"
+# include "xstrndup.h"
+#endif
 
 #ifdef TESTING
 #include "test.h"
@@ -1253,6 +1258,55 @@ parse_content_disposition (const char *hdr, char **filename)
     return false;
 }
 
+#ifdef HAVE_HSTS
+static bool
+parse_strict_transport_security (const char *header, time_t *max_age, bool *include_subdomains)
+{
+  param_token name, value;
+  const char *c_max_age = NULL;
+  bool is = false; /* includeSubDomains */
+  bool is_url_encoded = false;
+  bool success = false;
+
+  if (header)
+    {
+      /* Process the STS header. Keys should be matched case-insensitively. */
+      for (; extract_param (&header, &name, &value, ';', &is_url_encoded); is_url_encoded = false)
+      {
+	if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "max-age"))
+	  c_max_age = strdupdelim (value.b, value.e);
+	else if (BOUNDED_EQUAL_NO_CASE(name.b, name.e, "includeSubDomains"))
+	  is = true;
+      }
+
+      /* pass the parsed values over */
+      if (c_max_age)
+	{
+	  /* If the string value goes out of a long's bounds, strtol() will return LONG_MIN or LONG_MAX.
+	   * In theory, the HSTS engine should be able to handle it.
+	   * Also, time_t is normally defined as a long, so this should not break.
+	   */
+	  if (max_age)
+	    *max_age = (time_t) strtol (c_max_age, NULL, 10);
+	  if (include_subdomains)
+	    *include_subdomains = is;
+
+	  DEBUGP(("Parsed Strict-Transport-Security max-age = %s, includeSubDomains = %s\n",
+		     c_max_age, (is ? "true" : "false")));
+
+	  success = true;
+	}
+      else
+	{
+	  /* something weird happened */
+	  logprintf (LOG_VERBOSE, "Could not parse String-Transport-Security header\n");
+	  success = false;
+	}
+    }
+
+  return success;
+}
+#endif
 
 /* Persistent connections.  Currently, we cache the most recently used
    connection as persistent, provided that the HTTP server agrees to
@@ -1497,6 +1551,9 @@ struct http_stat
   wgint orig_file_size;         /* size of file to compare for time-stamping */
   time_t orig_file_tstamp;      /* time-stamp of file to compare for
                                  * time-stamping */
+#ifdef HAVE_METALINK
+  metalink_t *metalink;
+#endif
 };
 
 static void
@@ -1509,6 +1566,10 @@ free_hstat (struct http_stat *hs)
   xfree (hs->local_file);
   xfree (hs->orig_file_name);
   xfree (hs->message);
+#ifdef HAVE_METALINK
+  metalink_delete (hs->metalink);
+  hs->metalink = NULL;
+#endif
 }
 
 static void
@@ -2450,6 +2511,361 @@ set_content_type (int *dt, const char *type)
     *dt &= ~TEXTCSS;
 }
 
+#ifdef HAVE_METALINK
+/* Will return proper metalink_t structure if enough data was found in
+   http response resp. Otherwise returns NULL.
+   Two exit points: one for success and one for failure.  */
+static metalink_t *
+metalink_from_http (const struct response *resp, const struct http_stat *hs,
+                    const struct url *u)
+{
+  metalink_t *metalink = NULL;
+  metalink_file_t *mfile = xnew0 (metalink_file_t);
+  const char *val_beg, *val_end;
+  int res_count = 0, hash_count = 0, sig_count = 0, i;
+
+  DEBUGP (("Checking for Metalink in HTTP response\n"));
+
+  /* Initialize metalink file for our simple use case.  */
+  if (hs->local_file)
+    mfile->name = xstrdup (hs->local_file);
+  else
+    mfile->name = url_file_name (u, NULL);
+
+  /* Begin with 1-element array (for 0-termination). */
+  mfile->checksums = xnew0 (metalink_checksum_t *);
+  mfile->resources = xnew0 (metalink_resource_t *);
+
+  /* Find all Link headers.  */
+  for (i = 0;
+       (i = resp_header_locate (resp, "Link", i, &val_beg, &val_end)) != -1;
+       i++)
+    {
+      char *rel = NULL, *reltype = NULL;
+      char *urlstr = NULL;
+      const char *url_beg, *url_end, *attrs_beg;
+      size_t url_len;
+
+      /* Sample Metalink Link headers:
+
+           Link: <http://www2.example.com/dir1/dir2/dir3/dir4/dir5/example.ext>;
+           rel=duplicate; pri=1; pref; geo=gb; depth=4
+
+           Link: <http://example.com/example.ext.asc>; rel=describedby;
+           type="application/pgp-signature"
+       */
+
+      /* Find beginning of URL.  */
+      url_beg = val_beg;
+      while (url_beg < val_end - 1 && c_isspace (*url_beg))
+        url_beg++;
+
+      /* Find end of URL.  */
+      /* The convention here is that end ptr points to one element after
+         end of string. In this case, it should be pointing to the '>', which
+         is one element after end of actual URL. Therefore, it should never point
+         to val_end, which is one element after entire header value string.  */
+      url_end = url_beg + 1;
+      while (url_end < val_end - 1 && *url_end != '>')
+        url_end++;
+
+      if (url_beg >= val_end || url_end >= val_end ||
+          *url_beg != '<' || *url_end != '>')
+        {
+          DEBUGP (("This is not a valid Link header. Ignoring.\n"));
+          continue;
+        }
+
+      /* Skip <.  */
+      url_beg++;
+      url_len = url_end - url_beg;
+
+      /* URL found. Now handle the attributes.  */
+      attrs_beg = url_end + 1;
+
+      /* First we need to find out what type of link it is. Currently, we
+         support rel=duplicate and rel=describedby.  */
+      if (!find_key_value (attrs_beg, val_end, "rel", &rel))
+        {
+          DEBUGP (("No rel value in Link header, skipping.\n"));
+          continue;
+        }
+
+      urlstr = xstrndup (url_beg, url_len);
+      DEBUGP (("URL=%s\n", urlstr));
+      DEBUGP (("rel=%s\n", rel));
+
+      /* Handle signatures.
+         Libmetalink only supports one signature per file. Therefore we stop
+         as soon as we successfully get first supported signature.  */
+      if (sig_count == 0 &&
+          !strcmp (rel, "describedby") &&
+          find_key_value (attrs_beg, val_end, "type", &reltype) &&
+          !strcmp (reltype, "application/pgp-signature")
+          )
+        {
+          /* Download the signature to a temporary file.  */
+          FILE *_output_stream = output_stream;
+          bool _output_stream_regular = output_stream_regular;
+
+          output_stream = tmpfile ();
+          if (output_stream)
+            {
+              struct iri *iri = iri_new ();
+              struct url *url;
+              int url_err;
+
+              set_uri_encoding (iri, opt.locale, true);
+              url = url_parse (urlstr, &url_err, iri, false);
+
+              if (!url)
+                {
+                  char *error = url_error (urlstr, url_err);
+                  logprintf (LOG_NOTQUIET, _("When downloading signature:\n"
+                                             "%s: %s.\n"), urlstr, error);
+                  xfree (error);
+                }
+              else
+                {
+                  /* Avoid recursive Metalink from HTTP headers.  */
+                  bool _metalink_http = opt.metalink_over_http;
+                  uerr_t retr_err;
+
+                  opt.metalink_over_http = false;
+                  retr_err = retrieve_url (url, urlstr, NULL, NULL,
+                                           NULL, NULL, false, iri, false);
+                  opt.metalink_over_http = _metalink_http;
+
+                  url_free (url);
+                  iri_free (iri);
+
+                  if (retr_err == RETROK)
+                    {
+                      /* Signature is in the temporary file. Read it into
+                         metalink resource structure.  */
+                      metalink_signature_t msig;
+                      size_t siglen;
+
+                      fseek (output_stream, 0, SEEK_END);
+                      siglen = ftell (output_stream);
+                      fseek (output_stream, 0, SEEK_SET);
+
+                      DEBUGP (("siglen=%lu\n", siglen));
+
+                      msig.signature = xmalloc (siglen + 1);
+                      if (fread (msig.signature, siglen, 1, output_stream) != 1)
+                        {
+                          logputs (LOG_NOTQUIET,
+                                   _("Unable to read signature content from "
+                                     "temporary file. Skipping.\n"));
+                          xfree (msig.signature);
+                        }
+                      else
+                        {
+                          msig.signature[siglen] = '\0'; /* Just in case.  */
+                          msig.mediatype = xstrdup ("application/pgp-signature");
+
+                          DEBUGP (("Signature (%s):\n%s\n",
+                                   msig.mediatype, msig.signature));
+
+                          mfile->signature = xnew (metalink_signature_t);
+                          *mfile->signature = msig;
+
+                          sig_count++;
+                        }
+                    }
+                }
+              fclose (output_stream);
+            }
+          else
+            {
+              logputs (LOG_NOTQUIET, _("Could not create temporary file. "
+                                       "Skipping signature download.\n"));
+            }
+          output_stream_regular = _output_stream_regular;
+          output_stream = _output_stream;
+        } /* Iterate over signatures.  */
+
+        /* Handle Metalink resources.  */
+      else if (!strcmp (rel, "duplicate"))
+        {
+          metalink_resource_t mres = {0};
+          char *pristr;
+
+          /*
+             Valid ranges for the "pri" attribute are from
+             1 to 999999.  Mirror servers with a lower value of the "pri"
+             attribute have a higher priority, while mirrors with an undefined
+             "pri" attribute are considered to have a value of 999999, which is
+             the lowest priority.
+
+             rfc6249 section 3.1
+           */
+          mres.priority = DEFAULT_PRI;
+          if (find_key_value (url_end, val_end, "pri", &pristr))
+            {
+              long pri;
+              char *end_pristr;
+              /* Do not care for errno since 0 is error in this case.  */
+              pri = strtol (pristr, &end_pristr, 10);
+              if (end_pristr != pristr + strlen (pristr) ||
+                  !VALID_PRI_RANGE (pri))
+                {
+                  /* This is against the specification, so let's inform the user.  */
+                  logprintf (LOG_NOTQUIET,
+                             _("Invalid pri value. Assuming %d.\n"),
+                             DEFAULT_PRI);
+                }
+              else
+                mres.priority = pri;
+              xfree (pristr);
+            }
+
+          switch (url_scheme (urlstr))
+            {
+            case SCHEME_HTTP:
+              mres.type = xstrdup ("http");
+              break;
+#ifdef HAVE_SSL
+            case SCHEME_HTTPS:
+              mres.type = xstrdup ("https");
+              break;
+#endif
+            case SCHEME_FTP:
+              mres.type = xstrdup ("ftp");
+              break;
+            default:
+              DEBUGP (("Unsupported url scheme in %s. Skipping resource.\n", urlstr));
+            }
+
+          if (mres.type)
+            {
+              DEBUGP (("TYPE=%s\n", mres.type));
+
+              /* At this point we have validated the new resource.  */
+
+              find_key_value (url_end, val_end, "geo", &mres.location);
+
+              mres.url = urlstr;
+              urlstr = NULL;
+
+              mres.preference = 0;
+              if (has_key (url_end, val_end, "pref"))
+                {
+                  DEBUGP (("This resource has preference\n"));
+                  mres.preference = 1;
+                }
+
+              /* 1 slot from new resource, 1 slot for null-termination.  */
+              mfile->resources = xrealloc (mfile->resources,
+                                           sizeof (metalink_resource_t *) * (res_count + 2));
+              mfile->resources[res_count] = xnew0 (metalink_resource_t);
+              *mfile->resources[res_count] = mres;
+              res_count++;
+            }
+        } /* Handle resource link (rel=duplicate).  */
+      else
+        DEBUGP (("This link header was not used for Metalink\n"));
+
+      xfree (urlstr);
+      xfree (reltype);
+      xfree (rel);
+    } /* Iterate over link headers.  */
+
+  /* Null-terminate resources array.  */
+  mfile->resources[res_count] = 0;
+
+  if (res_count == 0)
+    {
+      DEBUGP (("No valid metalink references found.\n"));
+      goto fail;
+    }
+
+  /* Find all Digest headers.  */
+  for (i = 0;
+       (i = resp_header_locate (resp, "Digest", i, &val_beg, &val_end)) != -1;
+       i++)
+    {
+      const char *dig_pos;
+      char *dig_type, *dig_hash;
+
+      /* Each Digest header can include multiple hashes. Example:
+           Digest: SHA=thvDyvhfIqlvFe+A9MYgxAfm1q5=,unixsum=30637
+           Digest: md5=HUXZLQLMuI/KZ5KDcJPcOA==
+       */
+      for (dig_pos = val_beg;
+           (dig_pos = find_key_values (dig_pos, val_end, &dig_type, &dig_hash));
+           dig_pos++)
+        {
+          /* The hash here is assumed to be base64. We need the hash in hex.
+             Therefore we convert: base64 -> binary -> hex.  */
+          const size_t dig_hash_str_len = strlen (dig_hash);
+          char *bin_hash = alloca (dig_hash_str_len * 3 / 4 + 1);
+          size_t hash_bin_len;
+
+          hash_bin_len = base64_decode (dig_hash, bin_hash);
+
+          /* One slot for me, one for zero-termination.  */
+          mfile->checksums =
+                  xrealloc (mfile->checksums,
+                            sizeof (metalink_checksum_t *) * (hash_count + 2));
+          mfile->checksums[hash_count] = xnew (metalink_checksum_t);
+          mfile->checksums[hash_count]->type = dig_type;
+
+          mfile->checksums[hash_count]->hash = xmalloc (hash_bin_len * 2 + 1);
+          hex_to_string (mfile->checksums[hash_count]->hash, bin_hash, hash_bin_len);
+
+          xfree (dig_hash);
+
+          hash_count++;
+        }
+    }
+
+  /* Zero-terminate checksums array.  */
+  mfile->checksums[hash_count] = 0;
+
+  /*
+    If Instance Digests are not provided by the Metalink servers, the
+    Link header fields pertaining to this specification MUST be ignored.
+
+    rfc6249 section 6
+   */
+  if (hash_count == 0)
+    {
+      logputs (LOG_VERBOSE,
+               _("Could not find acceptable digest for Metalink resources.\n"
+                 "Ignoring them.\n"));
+      goto fail;
+    }
+
+  /* Metalink data is OK. Now we just need to sort the resources based
+     on their priorities, preference, and perhaps location.  */
+  stable_sort (mfile->resources, res_count, sizeof (metalink_resource_t *), metalink_res_cmp);
+
+  /* Restore sensible preference values (in case someone cares to look).  */
+  for (i = 0; i < res_count; ++i)
+    mfile->resources[i]->preference = 1000000 - mfile->resources[i]->priority;
+
+  metalink = xnew0 (metalink_t);
+  metalink->files = xmalloc (sizeof (metalink_file_t *) * 2);
+  metalink->files[0] = mfile;
+  metalink->files[1] = 0;
+  metalink->origin = xstrdup (u->url);
+  metalink->version = METALINK_VERSION_4;
+  /* Leave other fields set to 0.  */
+
+  return metalink;
+
+fail:
+  /* Free all allocated memory.  */
+  if (metalink)
+    metalink_delete (metalink);
+  else
+    metalink_file_delete (mfile);
+  return NULL;
+}
+#endif /* HAVE_METALINK */
+
 /* Retrieve a document through HTTP protocol.  It recognizes status
    code, and correctly handles redirections.  It closes the network
    socket.  If it receives an error from the functions below it, it
@@ -2476,6 +2892,17 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
   FILE *fp;
   int err;
   uerr_t retval;
+#ifdef HAVE_HSTS
+#ifdef TESTING
+  /* we don't link against main.o when we're testing */
+  hsts_store_t hsts_store = NULL;
+#else
+  extern hsts_store_t hsts_store;
+#endif
+  const char *hsts_params;
+  time_t max_age;
+  bool include_subdomains;
+#endif
 
   int sock = -1;
 
@@ -2500,6 +2927,11 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
 
   /* Whether conditional get request will be issued.  */
   bool cond_get = !!(*dt & IF_MODIFIED_SINCE);
+
+#ifdef HAVE_METALINK
+  /* Are we looking for metalink info in HTTP headers?  */
+  bool metalink = !!(*dt & METALINK_METADATA);
+#endif
 
   char *head = NULL;
   struct response *resp = NULL;
@@ -2838,6 +3270,19 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
        when we're done.  This means that we can register it.  */
     register_persistent (conn->host, conn->port, sock, using_ssl);
 
+#ifdef HAVE_METALINK
+  /* We need to check for the Metalink data in the very first response
+     we get from the server (before redirectionrs, authorization, etc.).  */
+  if (metalink)
+    {
+      hs->metalink = metalink_from_http (resp, hs, u);
+      xfree (hs->message);
+      retval = RETR_WITH_METALINK;
+      CLOSE_FINISH (sock);
+      goto cleanup;
+    }
+#endif
+
   if (statcode == HTTP_STATUS_UNAUTHORIZED)
     {
       /* Authorization is required.  */
@@ -2934,6 +3379,29 @@ gethttp (struct url *u, struct http_stat *hs, int *dt, struct url *proxy,
     hs->error = xstrdup (_("(no description)"));
   else
     hs->error = xstrdup (message);
+
+#ifdef HAVE_HSTS
+  if (opt.hsts && hsts_store)
+    {
+      hsts_params = resp_header_strdup (resp, "Strict-Transport-Security");
+      if (parse_strict_transport_security (hsts_params, &max_age, &include_subdomains))
+	{
+	  /* process strict transport security */
+	  if (hsts_store_entry (hsts_store, u->scheme, u->host, u->port, max_age, include_subdomains))
+	    DEBUGP(("Added new HSTS host: %s:%u (max-age: %u, includeSubdomains: %s)\n",
+		u->host,
+		u->port,
+		(unsigned int) max_age,
+		(include_subdomains ? "true" : "false")));
+	  else
+	    DEBUGP(("Updated HSTS host: %s:%u (max-age: %u, includeSubdomains: %s)\n",
+		u->host,
+		u->port,
+		(unsigned int) max_age,
+		(include_subdomains ? "true" : "false")));
+	}
+    }
+#endif
 
   type = resp_header_strdup (resp, "Content-Type");
   if (type)
@@ -3383,6 +3851,14 @@ http_loop (struct url *u, struct url *original_url, char **newloc,
   else
     file_name = xstrdup (opt.output_document);
 
+#ifdef HAVE_METALINK
+  if (opt.metalink_over_http)
+    {
+      *dt |= METALINK_METADATA;
+      send_head_first = true;
+    }
+#endif
+
   if (opt.timestamping)
     {
       /* Use conditional get request if requested
@@ -3569,6 +4045,29 @@ Spider mode enabled. Check if remote file exists.\n"));
         case RETRFINISHED:
           /* Deal with you later.  */
           break;
+#ifdef HAVE_METALINK
+        case RETR_WITH_METALINK:
+          {
+            if (hstat.metalink == NULL)
+              {
+                logputs (LOG_NOTQUIET,
+                         _("Could not find Metalink data in HTTP response. "
+                           "Downloading file using HTTP GET.\n"));
+                *dt &= ~METALINK_METADATA;
+                *dt &= ~HEAD_ONLY;
+                got_head = true;
+                continue;
+              }
+
+            logputs (LOG_VERBOSE,
+                     _("Metalink headers found. "
+                       "Switching to Metalink mode.\n"));
+
+            ret = retrieve_from_metalink (hstat.metalink);
+            goto exit;
+          }
+          break;
+#endif
         default:
           /* All possibilities should have been exhausted.  */
           abort ();
@@ -4391,9 +4890,7 @@ ensure_extension (struct http_stat *hs, const char *ext, int *dt)
     }
 }
 
-
 #ifdef TESTING
-
 const char *
 test_parse_content_disposition(void)
 {

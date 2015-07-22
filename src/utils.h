@@ -32,6 +32,8 @@ as that of the covered work.  */
 #ifndef UTILS_H
 #define UTILS_H
 
+# include <stdlib.h>
+
 /* Constant is using when we don`t know attempted size exactly */
 #define UNKNOWN_ATTEMPTED_SIZE -3
 
@@ -154,6 +156,8 @@ long get_max_length (const char *path, int length, int name);
 #ifndef HAVE_STRLCPY
 size_t strlcpy (char *dst, const char *src, size_t size);
 #endif
+
+void hex_to_string (char *str_buffer, const char *hex_buffer, size_t hex_len);
 
 extern unsigned char char_prop[];
 

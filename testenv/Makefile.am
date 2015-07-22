@@ -26,6 +26,13 @@
 # as that of the covered work.
 
 
+if METALINK_IS_ENABLED
+  METALINK_TESTS = Test-metalink-xml.py             \
+    Test-metalink-http.py
+else
+  METALINK_TESTS =
+endif
+
 AUTOMAKE_OPTIONS = parallel-tests
 AM_TESTS_ENVIRONMENT = export WGETRC=/dev/null; MAKE_CHECK=True; export MAKE_CHECK;\
  export PYTHONPATH=$$PYTHONPATH:$(srcdir); export VALGRIND_TESTS="@VALGRIND_TESTS@";
@@ -49,6 +56,9 @@ if HAVE_PYTHON3
     Test-cookie-expires.py                          \
     Test-cookie.py                                  \
     Test-Head.py                                    \
+    Test--https.py                                  \
+    Test--https-crl.py                              \
+    Test-hsts.py                                    \
     Test-O.py                                       \
     Test-Post.py                                    \
     Test-504.py                                     \
@@ -56,7 +66,8 @@ if HAVE_PYTHON3
     Test-redirect-crash.py                          \
     Test-reserved-chars.py                          \
     Test-condget.py                                 \
-    $(SSL_TESTS)
+    $(SSL_TESTS)				    \
+    $(METALINK_TESTS)
 
   # added test cases expected to fail here and under TESTS
 if !WITH_SSL

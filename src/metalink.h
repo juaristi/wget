@@ -1,6 +1,5 @@
-/* Declarations for HTTP.
-   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2015 Free
-   Software Foundation, Inc.
+/* Declarations for metalink.c.
+   Copyright (C) 2015 Free Software Foundation, Inc.
 
 This file is part of GNU Wget.
 
@@ -27,25 +26,35 @@ grants you additional permission to convey the resulting work.
 Corresponding Source for a non-source form of such a combination
 shall include the source code for the parts of OpenSSL used as well
 as that of the covered work.  */
+#if ! defined METALINK_H && defined HAVE_METALINK
+#define	METALINK_H
 
-#ifndef HTTP_H
-#define HTTP_H
+#include <metalink/metalink_types.h>
+#include "wget.h"
 
-#include "hsts.h"
+#ifdef HAVE_SSL
+# define RES_TYPE_SUPPORTED(x)\
+    ((!x) || !strcmp (x, "ftp") || !strcmp (x, "http") || !strcmp (x, "https"))
+#else
+# define RES_TYPE_SUPPORTED(x)\
+    ((!x) || !strcmp (x, "ftp") || !strcmp (x, "http"))
+#endif
 
-struct url;
+#define DEFAULT_PRI 999999
+#define VALID_PRI_RANGE(x) ((x) > 0 && (x) < 1000000)
 
-uerr_t http_loop (struct url *, struct url *, char **, char **, const char *,
-                  int *, struct url *, struct iri *);
-void save_cookies (void);
-void http_cleanup (void);
-time_t http_atotm (const char *);
+uerr_t retrieve_from_metalink (const metalink_t *metalink);
 
-typedef struct {
-  /* A token consists of characters in the [b, e) range. */
-  const char *b, *e;
-} param_token;
-bool extract_param (const char **, param_token *, param_token *, char, bool *);
+int metalink_res_cmp (const void *res1, const void *res2);
 
+bool find_key_value (const char *start,
+                     const char *end,
+                     const char *key,
+                     char **value);
+bool has_key (const char *start, const char *end, const char *key);
+const char *find_key_values (const char *start,
+                             const char *end,
+                             char **key,
+                             char **value);
 
-#endif /* HTTP_H */
+#endif	/* METALINK_H */

@@ -54,6 +54,7 @@ as that of the covered work.  */
 #include "convert.h"
 #include "spider.h"
 #include "http.h"               /* for save_cookies */
+#include "hsts.h"               /* for initializing hsts_store to NULL */
 #include "ptimer.h"
 #include "warc.h"
 #include "version.h"
@@ -62,6 +63,11 @@ as that of the covered work.  */
 #include <getopt.h>
 #include <getpass.h>
 #include <quote.h>
+
+#ifdef HAVE_METALINK
+# include <metalink/metalink_parser.h>
+# include "metalink.h"
+#endif
 
 #ifdef WINDOWS
 # include <io.h>
@@ -135,6 +141,63 @@ i18n_initialize (void)
   textdomain ("wget");
 #endif /* ENABLE_NLS */
 }
+
+#ifdef HAVE_HSTS
+/* make the HSTS store global */
+hsts_store_t hsts_store;
+
+static char*
+get_hsts_database (void)
+{
+  char *home;
+
+  if (opt.hsts_file)
+    return xstrdup (opt.hsts_file);
+
+  home = home_dir ();
+  if (home)
+    return aprintf ("%s/.wget-hsts", home);
+
+  return NULL;
+}
+
+static void
+load_hsts (void)
+{
+  if (!hsts_store)
+    {
+      char *filename = get_hsts_database ();
+
+      if (filename)
+        {
+          hsts_store = hsts_store_open (filename);
+
+          if (!hsts_store)
+            logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store at '%s'. "
+                       "HSTS will be disabled.\n",
+                       filename);
+        }
+      else
+        logprintf (LOG_NOTQUIET, "ERROR: could not open HSTS store. HSTS will be disabled.\n");
+
+      xfree (filename);
+    }
+}
+
+static void
+save_hsts (void)
+{
+  if (hsts_store)
+    {
+      char *filename = get_hsts_database ();
+
+      hsts_store_save (hsts_store, filename);
+      hsts_store_close (hsts_store);
+
+      xfree (filename);
+    }
+}
+#endif
 
 /* Definition of command-line options. */
 
@@ -225,6 +288,10 @@ static struct cmdline_option option_data[] =
     { "header", 0, OPT_VALUE, "header", -1 },
     { "help", 'h', OPT_FUNCALL, (void *)print_help, no_argument },
     { "host-directories", 0, OPT_BOOLEAN, "addhostdir", -1 },
+#ifdef HAVE_HSTS
+    { "hsts", 0, OPT_BOOLEAN, "hsts", -1},
+    { "hsts-file", 0, OPT_VALUE, "hsts-file", -1 },
+#endif
     { "html-extension", 'E', OPT_BOOLEAN, "adjustextension", -1 }, /* deprecated */
     { "htmlify", 0, OPT_BOOLEAN, "htmlify", -1 },
     { "http-keep-alive", 0, OPT_BOOLEAN, "httpkeepalive", -1 },
@@ -241,6 +308,9 @@ static struct cmdline_option option_data[] =
     { "inet6-only", '6', OPT_BOOLEAN, "inet6only", -1 },
 #endif
     { "input-file", 'i', OPT_VALUE, "input", -1 },
+#ifdef HAVE_METALINK
+    { "input-metalink", 0, OPT_VALUE, "input-metalink", -1 },
+#endif
     { "iri", 0, OPT_BOOLEAN, "iri", -1 },
     { "keep-session-cookies", 0, OPT_BOOLEAN, "keepsessioncookies", -1 },
     { "level", 'l', OPT_VALUE, "reclevel", -1 },
@@ -248,6 +318,9 @@ static struct cmdline_option option_data[] =
     { "load-cookies", 0, OPT_VALUE, "loadcookies", -1 },
     { "local-encoding", 0, OPT_VALUE, "localencoding", -1 },
     { "max-redirect", 0, OPT_VALUE, "maxredirect", -1 },
+#ifdef HAVE_METALINK
+    { "metalink-over-http", 0, OPT_BOOLEAN, "metalink-over-http", -1 },
+#endif
     { "method", 0, OPT_VALUE, "method", -1 },
     { "mirror", 'm', OPT_BOOLEAN, "mirror", -1 },
     { "no", 'n', OPT__NO, NULL, required_argument },
@@ -263,6 +336,9 @@ static struct cmdline_option option_data[] =
     { "post-data", 0, OPT_VALUE, "postdata", -1 },
     { "post-file", 0, OPT_VALUE, "postfile", -1 },
     { "prefer-family", 0, OPT_VALUE, "preferfamily", -1 },
+#ifdef HAVE_METALINK
+    { "preferred-location", 0, OPT_VALUE, "preferred-location", -1 },
+#endif
     { "preserve-permissions", 0, OPT_BOOLEAN, "preservepermissions", -1 },
     { IF_SSL ("private-key"), 0, OPT_VALUE, "privatekey", -1 },
     { IF_SSL ("private-key-type"), 0, OPT_VALUE, "privatekeytype", -1 },
@@ -483,6 +559,10 @@ Logging and input file:\n"),
        --report-speed=TYPE         output bandwidth as TYPE.  TYPE can be bits\n"),
     N_("\
   -i,  --input-file=FILE           download URLs found in local or external FILE\n"),
+#ifdef HAVE_METALINK
+    N_("\
+       --input-metalink=FILE       download files covered in local Metalink FILE\n"),
+#endif
     N_("\
   -F,  --force-html                treat input file as HTML\n"),
     N_("\
@@ -577,6 +657,12 @@ Download:\n"),
        --remote-encoding=ENC       use ENC as the default remote encoding\n"),
     N_("\
        --unlink                    remove file before clobber\n"),
+#ifdef HAVE_METALINK
+    N_("\
+       --metalink-over-http        use Metalink metadata from HTTP response headers\n"),
+    N_("\
+       --preferred-location        preferred location for Metalink resources\n"),
+#endif
     "\n",
 
     N_("\
@@ -689,6 +775,16 @@ HTTPS (SSL/TLS) options:\n"),
 #endif
     "\n",
 #endif /* HAVE_SSL */
+
+#ifdef HAVE_HSTS
+    N_("\
+HSTS options:\n"),
+    N_("\
+       --no-hsts                   disable HSTS\n"),
+    N_("\
+       --hsts-file                 path of HSTS database (will override default)\n"),
+    "\n",
+#endif
 
     N_("\
 FTP options:\n"),
@@ -1405,7 +1501,11 @@ for details.\n\n"));
       opt.always_rest = false;
     }
 
-  if (!nurl && !opt.input_filename)
+  if (!nurl && !opt.input_filename
+#ifdef HAVE_METALINK
+      && !opt.input_metalink
+#endif
+      )
     {
       /* No URL specified.  */
       fprintf (stderr, _("%s: missing URL\n"), exec_name);
@@ -1662,6 +1762,18 @@ outputting to a regular file.\n"));
   signal (SIGWINCH, progress_handle_sigwinch);
 #endif
 
+#ifdef HAVE_HSTS
+  hsts_store = NULL;
+
+  /* Load the HSTS database.
+     Maybe all the URLs are FTP(S), in which case HSTS would not be needed,
+     but this is the best place to do it, and it shouldn't be a critical
+     performance hit.
+   */
+  if (opt.hsts)
+    load_hsts ();
+#endif
+
   /* Retrieve the URLs from argument list.  */
   for (t = url; *t; t++)
     {
@@ -1699,10 +1811,10 @@ outputting to a regular file.\n"));
               opt.follow_ftp = old_follow_ftp;
             }
           else
-          {
-            retrieve_url (url_parsed, *t, &filename, &redirected_URL, NULL,
-                          &dt, opt.recursive, iri, true);
-          }
+            {
+              retrieve_url (url_parsed, *t, &filename, &redirected_URL, NULL,
+                            &dt, opt.recursive, iri, true);
+            }
 
           if (opt.delete_after && filename != NULL && file_exists_p (filename))
             {
@@ -1729,6 +1841,57 @@ outputting to a regular file.\n"));
         logprintf (LOG_NOTQUIET, _("No URLs found in %s.\n"),
                    opt.input_filename);
     }
+
+#ifdef HAVE_METALINK
+  /* Finally, from metlink file, if any.  */
+  if (opt.input_metalink)
+    {
+      metalink_error_t meta_err;
+      uerr_t retr_err;
+      metalink_t *metalink;
+
+      meta_err = metalink_parse_file (opt.input_metalink, &metalink);
+
+      if (meta_err)
+        {
+          logprintf (LOG_NOTQUIET, _("Unable to parse metalink file %s.\n"),
+                     opt.input_metalink);
+          retr_err = METALINK_PARSE_ERROR;
+        }
+      else
+        {
+          /* We need to sort the resources if preferred location
+             was specified by the user.  */
+          if (opt.preferred_location && opt.preferred_location[0])
+            {
+              metalink_file_t **mfile_ptr;
+              for (mfile_ptr = metalink->files; *mfile_ptr; mfile_ptr++)
+                {
+                  metalink_resource_t **mres_ptr;
+                  metalink_file_t *mfile = *mfile_ptr;
+                  size_t mres_count = 0;
+
+                  for (mres_ptr = mfile->resources; *mres_ptr; mres_ptr++)
+                    mres_count++;
+
+                  stable_sort (mfile->resources,
+                               mres_count,
+                               sizeof (metalink_resource_t *),
+                               metalink_res_cmp);
+                }
+            }
+          retr_err = retrieve_from_metalink (metalink);
+          if (retr_err != RETROK)
+            {
+              logprintf (LOG_NOTQUIET,
+                         _("Could not download all resources from %s.\n"),
+                         quote (opt.input_metalink));
+            }
+        }
+      inform_exit_status (retr_err);
+      metalink_delete (metalink);
+    }
+#endif /* HAVE_METALINK */
 
   /* Print broken links. */
   if (opt.recursive && opt.spider)
@@ -1768,6 +1931,11 @@ outputting to a regular file.\n"));
 
   if (opt.cookies_output)
     save_cookies ();
+
+#ifdef HAVE_HSTS
+  if (opt.hsts && hsts_store)
+    save_hsts ();
+#endif
 
   if (opt.convert_links && !opt.delete_after)
     convert_all_links ();
