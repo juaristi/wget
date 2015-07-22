@@ -230,6 +230,7 @@ struct options
   char *egd_file;               /* file name of the egd daemon socket */
   bool https_only;              /* whether to follow HTTPS only */
   bool resume_ssl;
+  bool fallback_to_ftp;
 #endif /* HAVE_SSL */
 
   bool cookies;                 /* whether cookies are used. */

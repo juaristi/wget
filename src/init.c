@@ -182,6 +182,9 @@ static const struct {
 #endif
   { "excludedirectories", &opt.excludes,        cmd_directory_vector },
   { "excludedomains",   &opt.exclude_domains,   cmd_vector },
+#ifdef HAVE_SSL
+  { "fallbacktoftp",    &opt.fallback_to_ftp,   cmd_boolean },
+#endif
   { "followftp",        &opt.follow_ftp,        cmd_boolean },
   { "followtags",       &opt.follow_tags,       cmd_vector },
   { "forcehtml",        &opt.force_html,        cmd_boolean },

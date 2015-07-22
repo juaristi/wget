@@ -361,6 +361,18 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
 
               using_security = true;
             }
+          else
+            {
+              /* The server does not support 'AUTH TLS'.
+               * Check if --ftps-fallback-to-ftp was passed. */
+              if (opt.fallback_to_ftp)
+                using_security = false;
+              else
+                {
+                  fd_close (csock);
+                  return CONSSLERR;
+                }
+            }
         }
 #endif
 

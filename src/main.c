@@ -284,6 +284,10 @@ static struct cmdline_option option_data[] =
     { "ftp-stmlf", 0, OPT_BOOLEAN, "ftpstmlf", -1 },
 #endif /* def __VMS */
     { "ftp-user", 0, OPT_VALUE, "ftpuser", -1 },
+#ifdef HAVE_SSL
+    { "ftps-fallback-to-ftp", 0, OPT_BOOLEAN, "fallbacktoftp", -1 },
+    { "ftps-resume-ssl", 0, OPT_BOOLEAN, "resumessl", -1 },
+#endif
     { "glob", 0, OPT_BOOLEAN, "glob", -1 },
     { "header", 0, OPT_VALUE, "header", -1 },
     { "help", 'h', OPT_FUNCALL, (void *)print_help, no_argument },
@@ -365,9 +369,6 @@ static struct cmdline_option option_data[] =
     { "remove-listing", 0, OPT_BOOLEAN, "removelisting", -1 },
     { "report-speed", 0, OPT_BOOLEAN, "reportspeed", -1 },
     { "restrict-file-names", 0, OPT_BOOLEAN, "restrictfilenames", -1 },
-#ifdef HAVE_SSL
-    { "ftps-resume-ssl", 0, OPT_BOOLEAN, "resumessl", -1 },
-#endif
     { "retr-symlinks", 0, OPT_BOOLEAN, "retrsymlinks", -1 },
     { "retry-connrefused", 0, OPT_BOOLEAN, "retryconnrefused", -1 },
     { "save-cookies", 0, OPT_VALUE, "savecookies", -1 },
