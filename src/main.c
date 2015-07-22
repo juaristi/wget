@@ -365,6 +365,9 @@ static struct cmdline_option option_data[] =
     { "remove-listing", 0, OPT_BOOLEAN, "removelisting", -1 },
     { "report-speed", 0, OPT_BOOLEAN, "reportspeed", -1 },
     { "restrict-file-names", 0, OPT_BOOLEAN, "restrictfilenames", -1 },
+#ifdef HAVE_SSL
+    { "resume-ssl", 0, OPT_BOOLEAN, "resumessl", -1 },
+#endif
     { "retr-symlinks", 0, OPT_BOOLEAN, "retrsymlinks", -1 },
     { "retry-connrefused", 0, OPT_BOOLEAN, "retryconnrefused", -1 },
     { "save-cookies", 0, OPT_VALUE, "savecookies", -1 },

@@ -280,6 +280,9 @@ static const struct {
   { "removelisting",    &opt.remove_listing,    cmd_boolean },
   { "reportspeed",             &opt.report_bps, cmd_spec_report_speed},
   { "restrictfilenames", NULL,                  cmd_spec_restrict_file_names },
+#ifdef HAVE_SSL
+  { "resumessl",        &opt.resume_ssl,        cmd_boolean },
+#endif
   { "retrsymlinks",     &opt.retr_symlinks,     cmd_boolean },
   { "retryconnrefused", &opt.retry_connrefused, cmd_boolean },
   { "robots",           &opt.use_robots,        cmd_boolean },
@@ -407,6 +410,7 @@ defaults (void)
 
 #ifdef HAVE_SSL
   opt.check_cert = true;
+  opt.resume_ssl = true;
 #endif
 
   /* The default for file name restriction defaults to the OS type. */

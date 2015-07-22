@@ -1387,9 +1387,10 @@ Error in server response, closing control connection.\n"));
       /* We should try to restore the existing SSL session in the data connection
        * and fall back to establishing a new session if the server doesn't want to restore it.
        */
-      if (!ssl_connect_wget (dtsock, u->host, &csock))
+      if (!opt.resume_ssl || !ssl_connect_wget (dtsock, u->host, &csock))
         {
-          logputs (LOG_NOTQUIET, "Server does not want to resume SSL session. Trying with a new one.\n");
+          if (opt.resume_ssl)
+            logputs (LOG_NOTQUIET, "Server does not want to resume the SSL session. Trying with a new one.\n");
           if (!ssl_connect_wget (dtsock, u->host, NULL))
             {
               fd_close (csock);
@@ -1399,7 +1400,7 @@ Error in server response, closing control connection.\n"));
             }
         }
       else
-        logputs (LOG_NOTQUIET, "Resuming SSL session in data connection\n");
+        logputs (LOG_NOTQUIET, "Resuming SSL session in data connection.\n");
 
       if (!ssl_check_certificate (dtsock, u->host))
         {
