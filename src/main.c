@@ -366,7 +366,7 @@ static struct cmdline_option option_data[] =
     { "report-speed", 0, OPT_BOOLEAN, "reportspeed", -1 },
     { "restrict-file-names", 0, OPT_BOOLEAN, "restrictfilenames", -1 },
 #ifdef HAVE_SSL
-    { "resume-ssl", 0, OPT_BOOLEAN, "resumessl", -1 },
+    { "ftps-resume-ssl", 0, OPT_BOOLEAN, "resumessl", -1 },
 #endif
     { "retr-symlinks", 0, OPT_BOOLEAN, "retrsymlinks", -1 },
     { "retry-connrefused", 0, OPT_BOOLEAN, "retryconnrefused", -1 },
