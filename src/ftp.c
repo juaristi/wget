@@ -366,11 +366,14 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
               /* The server does not support 'AUTH TLS'.
                * Check if --ftps-fallback-to-ftp was passed. */
               if (opt.fallback_to_ftp)
-                using_security = false;
+                {
+                  logputs (LOG_NOTQUIET, "Server does not support AUTH TLS. Falling back to FTP.\n");
+                  using_security = false;
+                }
               else
                 {
                   fd_close (csock);
-                  return CONSSLERR;
+                  return FTPNOAUTH;
                 }
             }
         }
@@ -1809,6 +1812,9 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con, char **local_fi
 
       switch (err)
         {
+        case FTPNOAUTH:
+          logputs (LOG_NOTQUIET, "Server does not support AUTH TLS.\n");
+          /* fallback */
         case HOSTERR: case CONIMPOSSIBLE: case FWRITEERR: case FOPENERR:
         case FTPNSFOD: case FTPLOGINC: case FTPNOPASV: case CONTNOTSUPPORTED:
         case UNLINKERR: case WARC_TMP_FWRITEERR:

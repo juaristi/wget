@@ -414,6 +414,7 @@ defaults (void)
 #ifdef HAVE_SSL
   opt.check_cert = true;
   opt.resume_ssl = true;
+  opt.fallback_to_ftp = false;
 #endif
 
   /* The default for file name restriction defaults to the OS type. */
