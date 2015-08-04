@@ -191,6 +191,7 @@ static const struct {
   { "ftppasswd",        &opt.ftp_passwd,        cmd_string }, /* deprecated */
   { "ftppassword",      &opt.ftp_passwd,        cmd_string },
   { "ftpproxy",         &opt.ftp_proxy,         cmd_string },
+  { "ftpsimplicit",     &opt.ftps_implicit,     cmd_boolean },
 #ifdef __VMS
   { "ftpstmlf",         &opt.ftp_stmlf,         cmd_boolean },
 #endif /* def __VMS */
@@ -415,6 +416,7 @@ defaults (void)
   opt.check_cert = true;
   opt.resume_ssl = true;
   opt.fallback_to_ftp = false;
+  opt.ftps_implicit = false;
 #endif
 
   /* The default for file name restriction defaults to the OS type. */

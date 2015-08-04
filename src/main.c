@@ -286,6 +286,7 @@ static struct cmdline_option option_data[] =
     { "ftp-user", 0, OPT_VALUE, "ftpuser", -1 },
 #ifdef HAVE_SSL
     { "ftps-fallback-to-ftp", 0, OPT_BOOLEAN, "fallbacktoftp", -1 },
+    { "ftps-implicit", 0, OPT_BOOLEAN, "ftpsimplicit", -1 },
     { "ftps-resume-ssl", 0, OPT_BOOLEAN, "resumessl", -1 },
 #endif
     { "glob", 0, OPT_BOOLEAN, "glob", -1 },

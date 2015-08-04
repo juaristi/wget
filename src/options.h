@@ -231,6 +231,7 @@ struct options
   bool https_only;              /* whether to follow HTTPS only */
   bool resume_ssl;
   bool fallback_to_ftp;
+  bool ftps_implicit;
 #endif /* HAVE_SSL */
 
   bool cookies;                 /* whether cookies are used. */
