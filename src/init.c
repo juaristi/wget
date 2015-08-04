@@ -182,16 +182,17 @@ static const struct {
 #endif
   { "excludedirectories", &opt.excludes,        cmd_directory_vector },
   { "excludedomains",   &opt.exclude_domains,   cmd_vector },
-#ifdef HAVE_SSL
-  { "fallbacktoftp",    &opt.fallback_to_ftp,   cmd_boolean },
-#endif
   { "followftp",        &opt.follow_ftp,        cmd_boolean },
   { "followtags",       &opt.follow_tags,       cmd_vector },
   { "forcehtml",        &opt.force_html,        cmd_boolean },
   { "ftppasswd",        &opt.ftp_passwd,        cmd_string }, /* deprecated */
   { "ftppassword",      &opt.ftp_passwd,        cmd_string },
   { "ftpproxy",         &opt.ftp_proxy,         cmd_string },
+#ifdef HAVE_SSL
+  { "ftpsfallbacktoftp", &opt.ftps_fallback_to_ftp, cmd_boolean },
   { "ftpsimplicit",     &opt.ftps_implicit,     cmd_boolean },
+  { "ftpsresumessl",    &opt.ftps_resume_ssl,   cmd_boolean },
+#endif
 #ifdef __VMS
   { "ftpstmlf",         &opt.ftp_stmlf,         cmd_boolean },
 #endif /* def __VMS */
@@ -284,9 +285,6 @@ static const struct {
   { "removelisting",    &opt.remove_listing,    cmd_boolean },
   { "reportspeed",             &opt.report_bps, cmd_spec_report_speed},
   { "restrictfilenames", NULL,                  cmd_spec_restrict_file_names },
-#ifdef HAVE_SSL
-  { "resumessl",        &opt.resume_ssl,        cmd_boolean },
-#endif
   { "retrsymlinks",     &opt.retr_symlinks,     cmd_boolean },
   { "retryconnrefused", &opt.retry_connrefused, cmd_boolean },
   { "robots",           &opt.use_robots,        cmd_boolean },
@@ -414,8 +412,8 @@ defaults (void)
 
 #ifdef HAVE_SSL
   opt.check_cert = true;
-  opt.resume_ssl = true;
-  opt.fallback_to_ftp = false;
+  opt.ftps_resume_ssl = true;
+  opt.ftps_fallback_to_ftp = false;
   opt.ftps_implicit = false;
 #endif
 

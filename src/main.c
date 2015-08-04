@@ -285,9 +285,9 @@ static struct cmdline_option option_data[] =
 #endif /* def __VMS */
     { "ftp-user", 0, OPT_VALUE, "ftpuser", -1 },
 #ifdef HAVE_SSL
-    { "ftps-fallback-to-ftp", 0, OPT_BOOLEAN, "fallbacktoftp", -1 },
+    { "ftps-fallback-to-ftp", 0, OPT_BOOLEAN, "ftpsfallbacktoftp", -1 },
     { "ftps-implicit", 0, OPT_BOOLEAN, "ftpsimplicit", -1 },
-    { "ftps-resume-ssl", 0, OPT_BOOLEAN, "resumessl", -1 },
+    { "ftps-resume-ssl", 0, OPT_BOOLEAN, "ftpsresumessl", -1 },
 #endif
     { "glob", 0, OPT_BOOLEAN, "glob", -1 },
     { "header", 0, OPT_VALUE, "header", -1 },
