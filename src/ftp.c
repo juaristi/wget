@@ -406,28 +406,34 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
         con->csock = -1;
 
 #ifdef HAVE_SSL
-      if (opt.ftps_implicit)
+      if (u->scheme == SCHEME_FTPS)
         {
-          if (u->scheme == SCHEME_FTPS)
+          /* If we're in implicit FTPS mode, we have to set up SSL/TLS before everything else.
+           * Otherwise we first read the server's greeting, and then send an "AUTH TLS".
+           */
+          if (opt.ftps_implicit)
             {
               err = init_control_ssl_connection (csock, u, &using_security);
               if (err != NOCONERROR)
                 return err;
-            }
-          err = get_ftp_greeting (csock, con);
-          if (err != FTPOK)
-            return err;
-        }
-      else
-        {
-          if (u->scheme == SCHEME_FTPS)
-            {
               err = get_ftp_greeting (csock, con);
               if (err != FTPOK)
                 return err;
             }
-          err = init_control_ssl_connection (csock, u, &using_security);
-          if (err != NOCONERROR)
+          else
+            {
+              err = get_ftp_greeting (csock, con);
+              if (err != FTPOK)
+                return err;
+              err = init_control_ssl_connection (csock, u, &using_security);
+              if (err != NOCONERROR)
+                return err;
+            }
+        }
+      else
+        {
+          err = get_ftp_greeting (csock, con);
+          if (err != FTPOK)
             return err;
         }
 #else
@@ -1872,10 +1878,12 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con, char **local_fi
         case HOSTERR: case CONIMPOSSIBLE: case FWRITEERR: case FOPENERR:
         case FTPNSFOD: case FTPLOGINC: case FTPNOPASV: case CONTNOTSUPPORTED:
         case UNLINKERR: case WARC_TMP_FWRITEERR: case CONSSLERR: case FTPNOAUTH:
+#ifdef HAVE_SSL
           if (err == FTPNOAUTH)
             logputs (LOG_NOTQUIET, "Server does not support AUTH TLS.\n");
           if (opt.ftps_implicit)
             logputs (LOG_NOTQUIET, "Server does not like implicit FTPS connections.\n");
+#endif
           /* Fatal errors, give up.  */
           if (warc_tmp != NULL)
               fclose (warc_tmp);
