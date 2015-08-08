@@ -266,6 +266,8 @@ init_control_ssl_connection (int csock, struct url *u, bool *using_sec)
    * Otherwise send an AUTH sequence before login,
    * and perform the SSL handshake if accepted by server.
    */
+  if (!opt.ftps_implicit && !opt.server_response)
+    logputs (LOG_VERBOSE, "==> AUTH TLS ... ");
   if (opt.ftps_implicit || ftp_auth (csock, SCHEME_FTPS) == FTPOK)
     {
       if (!ssl_connect_wget (csock, u->host, NULL))
@@ -278,6 +280,9 @@ init_control_ssl_connection (int csock, struct url *u, bool *using_sec)
           fd_close (csock);
           return VERIFCERTERR;
         }
+
+      if (!opt.ftps_implicit && !opt.server_response)
+        logputs (LOG_VERBOSE, " done.\n");
 
       /* If implicit FTPS was requested, we act as "normal" FTP, but over SSL.
        * We're not using RFC 2228 commands.
@@ -1553,10 +1558,18 @@ Error in server response, closing control connection.\n"));
      become apparent later.  */
   if (*respline != '2')
     {
-      xfree (respline);
       if (res != -1)
         logprintf (LOG_NOTQUIET, "%s (%s) - ", tms, tmrate);
       logputs (LOG_NOTQUIET, _("Data transfer aborted.\n"));
+#ifdef HAVE_SSL
+      if (!c_strncasecmp (respline, "425", 3) && u->scheme == SCHEME_FTPS)
+        {
+          logputs (LOG_NOTQUIET, "FTPS server rejects new SSL sessions in the data connection.\n");
+          xfree (respline);
+          return FTPRESTFAIL;
+        }
+#endif
+      xfree (respline);
       return FTPRETRINT;
     }
   xfree (respline);
