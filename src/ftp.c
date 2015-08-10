@@ -519,16 +519,26 @@ Error in server response, closing control connection.\n"));
            * --ftps-fallback-to-ftp or similar options. */
           if (u->scheme == SCHEME_FTPS)
             {
+              if (!opt.server_response)
+                logputs (LOG_VERBOSE, "==> PBSZ 0 ... ");
               if ((err = ftp_pbsz (csock, 0)) == FTPNOPBSZ)
                 {
                   logputs (LOG_NOTQUIET, _("Server did not accept the 'PBSZ 0' command.\n"));
                   return err;
                 }
+              if (!opt.server_response)
+                logputs (LOG_VERBOSE, "done.");
+
+              if (!opt.server_response)
+                logprintf (LOG_VERBOSE, "  ==> PROT %c ... ", prot);
               if ((err = ftp_prot (csock, prot)) == FTPNOPROT)
                 {
                   logprintf (LOG_NOTQUIET, _("Server did not accept the 'PROT %c' command.\n"), prot);
                   return err;
                 }
+              if (!opt.server_response)
+                logputs (LOG_VERBOSE, "done.\n");
+
               if (prot != PROT_CLEAR)
                 using_data_security = true;
             }
