@@ -506,18 +506,25 @@ Error in server response, closing control connection.\n"));
         }
 
 #ifdef HAVE_SSL
-      /* Most FTP clients will typically send PBSZ and PROT in the very beginning,
-       * even though they're not needed until a data connection is opened, which may not
-       * even happen at all.
-       */
       if (using_security)
         {
-          /* Send the PBSZ and PROT commands, in that order */
+          /* Send the PBSZ and PROT commands, in that order.
+           * If we are here it means that the server has already accepted
+           * some form of FTPS. Thus, these commands must work.
+           * If they don't work, that's an error. There's no sense in honoring
+           * --ftps-fallback-to-ftp or similar options. */
           if (u->scheme == SCHEME_FTPS)
             {
-              ftp_pbsz (csock, 0);
-              ftp_prot (csock, PROT_PRIVATE);
-              /* TODO check the return values here */
+              if ((err = ftp_pbsz (csock, 0)) == FTPNOPBSZ)
+                {
+                  logputs (LOG_NOTQUIET, _("Server did not accept the 'PBSZ 0' command.\n"));
+                  return err;
+                }
+              if ((err = ftp_prot (csock, PROT_PRIVATE)) == FTPNOPROT)
+                {
+                  logputs (LOG_NOTQUIET, _("Server did not accept the 'PROT P' command.\n"));
+                  return err;
+                }
             }
         }
 #endif
@@ -1889,8 +1896,8 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con, char **local_fi
       switch (err)
         {
         case HOSTERR: case CONIMPOSSIBLE: case FWRITEERR: case FOPENERR:
-        case FTPNSFOD: case FTPLOGINC: case FTPNOPASV: case CONTNOTSUPPORTED:
-        case UNLINKERR: case WARC_TMP_FWRITEERR: case CONSSLERR: case FTPNOAUTH:
+        case FTPNSFOD: case FTPLOGINC: case FTPNOPASV: case FTPNOAUTH: case FTPNOPBSZ: case FTPNOPROT:
+        case UNLINKERR: case WARC_TMP_FWRITEERR: case CONSSLERR: case CONTNOTSUPPORTED:
 #ifdef HAVE_SSL
           if (err == FTPNOAUTH)
             logputs (LOG_NOTQUIET, "Server does not support AUTH TLS.\n");
