@@ -257,7 +257,7 @@ get_ftp_greeting(int csock, ccon *con)
 
 #ifdef HAVE_SSL
 static uerr_t
-init_control_ssl_connection (int csock, struct url *u, bool *using_sec)
+init_control_ssl_connection (int csock, struct url *u, bool *using_control_security)
 {
   bool using_security = false;
 
@@ -305,7 +305,7 @@ init_control_ssl_connection (int csock, struct url *u, bool *using_sec)
         }
     }
 
-  *using_sec = using_security;
+  *using_control_security = using_security;
   return NOCONERROR;
 }
 #endif
@@ -334,10 +334,14 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
   char type_char;
   bool try_again;
   bool list_a_used = false;
+  enum prot_level prot = (opt.ftps_clear_data_connection ? PROT_CLEAR : PROT_PRIVATE);
 #ifdef HAVE_SSL
-  /* this variable tells whether the target server
-   * accepts the security extensions (RFC 2228) or not */
-  bool using_security = false;
+  /* these variables tell whether the target server
+   * accepts the security extensions (RFC 2228) or not,
+   * and whether we're actually using any of them
+   * (encryption at the control connection only,
+   * or both at control and data connections) */
+  bool using_control_security = false, using_data_security = false;
 #endif
 
   assert (con != NULL);
@@ -418,7 +422,7 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
            */
           if (opt.ftps_implicit)
             {
-              err = init_control_ssl_connection (csock, u, &using_security);
+              err = init_control_ssl_connection (csock, u, &using_control_security);
               if (err != NOCONERROR)
                 return err;
               err = get_ftp_greeting (csock, con);
@@ -430,7 +434,7 @@ getftp (struct url *u, wgint passed_expected_bytes, wgint *qtyread,
               err = get_ftp_greeting (csock, con);
               if (err != FTPOK)
                 return err;
-              err = init_control_ssl_connection (csock, u, &using_security);
+              err = init_control_ssl_connection (csock, u, &using_control_security);
               if (err != NOCONERROR)
                 return err;
             }
@@ -506,7 +510,7 @@ Error in server response, closing control connection.\n"));
         }
 
 #ifdef HAVE_SSL
-      if (using_security)
+      if (using_control_security)
         {
           /* Send the PBSZ and PROT commands, in that order.
            * If we are here it means that the server has already accepted
@@ -520,11 +524,13 @@ Error in server response, closing control connection.\n"));
                   logputs (LOG_NOTQUIET, _("Server did not accept the 'PBSZ 0' command.\n"));
                   return err;
                 }
-              if ((err = ftp_prot (csock, PROT_PRIVATE)) == FTPNOPROT)
+              if ((err = ftp_prot (csock, prot)) == FTPNOPROT)
                 {
-                  logputs (LOG_NOTQUIET, _("Server did not accept the 'PROT P' command.\n"));
+                  logprintf (LOG_NOTQUIET, _("Server did not accept the 'PROT %c' command.\n"), prot);
                   return err;
                 }
+              if (prot != PROT_CLEAR)
+                using_data_security = true;
             }
         }
 #endif
@@ -1472,7 +1478,7 @@ Error in server response, closing control connection.\n"));
     print_length (expected_bytes, restval, false);
 
 #ifdef HAVE_SSL
-  if (u->scheme == SCHEME_FTPS && using_security)
+  if (u->scheme == SCHEME_FTPS && using_data_security)
     {
       /* We should try to restore the existing SSL session in the data connection
        * and fall back to establishing a new session if the server doesn't want to restore it.

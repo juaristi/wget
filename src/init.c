@@ -189,6 +189,7 @@ static const struct {
   { "ftppassword",      &opt.ftp_passwd,        cmd_string },
   { "ftpproxy",         &opt.ftp_proxy,         cmd_string },
 #ifdef HAVE_SSL
+  { "ftpscleardataconnection", &opt.ftps_clear_data_connection, cmd_boolean },
   { "ftpsfallbacktoftp", &opt.ftps_fallback_to_ftp, cmd_boolean },
   { "ftpsimplicit",     &opt.ftps_implicit,     cmd_boolean },
   { "ftpsresumessl",    &opt.ftps_resume_ssl,   cmd_boolean },
@@ -416,6 +417,7 @@ defaults (void)
   opt.ftps_resume_ssl = true;
   opt.ftps_fallback_to_ftp = false;
   opt.ftps_implicit = false;
+  opt.ftps_clear_data_connection = false;
 #endif
 
   /* The default for file name restriction defaults to the OS type. */
