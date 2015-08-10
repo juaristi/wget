@@ -527,7 +527,7 @@ ftp_prot (int csock, enum prot_level prot)
   int written = 0;
   char *request = NULL, *response = NULL;
   /* value must be a single character value */
-  char value[] = {prot, '\0'};
+  char value[2] = {(char) prot, '\0'};
 
   request = ftp_request ("PROT", value);
   written = fd_write (csock, request, strlen (request), -1);
