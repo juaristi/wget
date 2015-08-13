@@ -555,7 +555,8 @@ Error in server response, closing control connection.\n"));
                   if (!opt.server_response)
                     logputs (LOG_VERBOSE, "done.\n");
 
-                  ssl_disconnect_wget (csock);
+                  if (!ssl_disconnect_wget (csock))
+                    return CONSSLERR;
                   using_control_security = false;
                   /* opt.ftps_resume_ssl must be false here.
                    * We took care of that in main().

@@ -586,11 +586,26 @@ ssl_connect_wget (int fd, const char *hostname, int *continue_session)
   return false;
 }
 
-/* TODO implement */
 bool
 ssl_disconnect_wget (int fd)
 {
-  return false;
+  bool success = false;
+  int ssl_state = 0;
+  struct openssl_transport_context *ctx = (struct openssl_transport_context *) fd_transport_context (fd);
+  SSL *conn = ctx->conn;
+
+  ssl_state = SSL_shutdown (conn);
+  if (ssl_state == 0)
+    ssl_state |= SSL_shutdown (conn);
+
+  if (ssl_state == 1)
+    {
+      fd_unregister_transport (fd);
+      xfree (ctx);
+      success = true;
+    }
+
+  return success;
 }
 
 #define ASTERISK_EXCLUDES_DOT   /* mandated by rfc2818 */
