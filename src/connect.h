@@ -73,6 +73,7 @@ struct transport_implementation {
 };
 
 void fd_register_transport (int, struct transport_implementation *, void *);
+void fd_unregister_transport (int);
 void *fd_transport_context (int);
 int fd_read (int, char *, int, double);
 int fd_write (int, char *, int, double);

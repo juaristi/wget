@@ -586,6 +586,13 @@ ssl_connect_wget (int fd, const char *hostname, int *continue_session)
   return false;
 }
 
+/* TODO implement */
+bool
+ssl_disconnect_wget (int fd)
+{
+  return false;
+}
+
 #define ASTERISK_EXCLUDES_DOT   /* mandated by rfc2818 */
 
 /* Return true is STRING (case-insensitively) matches PATTERN, false
