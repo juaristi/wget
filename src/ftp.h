@@ -70,6 +70,7 @@ uerr_t ftp_port (int, int *);
 uerr_t ftp_pasv (int, ip_address *, int *);
 #ifdef HAVE_SSL
 uerr_t ftp_auth (int, enum url_scheme);
+uerr_t ftp_ccc  (int);
 uerr_t ftp_pbsz (int, int);
 uerr_t ftp_prot (int, enum prot_level);
 #endif

@@ -233,6 +233,7 @@ struct options
   bool ftps_fallback_to_ftp;
   bool ftps_implicit;
   bool ftps_clear_data_connection;
+  bool ftps_clear_after_login;
 #endif /* HAVE_SSL */
 
   bool cookies;                 /* whether cookies are used. */

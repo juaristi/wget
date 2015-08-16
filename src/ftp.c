@@ -540,6 +540,27 @@ Error in server response, closing control connection.\n"));
 
               if (prot != PROT_CLEAR)
                 using_data_security = true;
+
+              if (opt.ftps_clear_after_login)
+                {
+                  /* Clear the control channel: send a CCC command and disable the SSL/TLS layer */
+                  if (!opt.server_response)
+                    logputs (LOG_VERBOSE, "==> CCC ... ");
+                  if ((err = ftp_ccc (csock)) == FTPNOCCC)
+                    {
+                      logputs (LOG_NOTQUIET, _("Server did not accept the 'CCC' command.\n"));
+                      return err;
+                    }
+                  if (!opt.server_response)
+                    logputs (LOG_VERBOSE, "done.\n");
+
+                  if (!ssl_disconnect_wget (csock))
+                    return CONSSLERR;
+                  using_control_security = false;
+                  /* opt.ftps_resume_ssl must be false here.
+                   * We took care of that in main().
+                   */
+                }
             }
         }
 #endif
@@ -1917,7 +1938,7 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con, char **local_fi
       switch (err)
         {
         case HOSTERR: case CONIMPOSSIBLE: case FWRITEERR: case FOPENERR:
-        case FTPNSFOD: case FTPLOGINC: case FTPNOPASV: case FTPNOAUTH: case FTPNOPBSZ: case FTPNOPROT:
+        case FTPNSFOD: case FTPLOGINC: case FTPNOPASV: case FTPNOAUTH: case FTPNOPBSZ: case FTPNOPROT: case FTPNOCCC:
         case UNLINKERR: case WARC_TMP_FWRITEERR: case CONSSLERR: case CONTNOTSUPPORTED:
 #ifdef HAVE_SSL
           if (err == FTPNOAUTH)

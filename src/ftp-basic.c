@@ -480,11 +480,33 @@ bail:
   return err;
 }
 
-/* TODO implement */
 uerr_t
 ftp_ccc (int csock)
 {
   uerr_t err = 0;
+  int written = 0;
+  char *request = NULL, *response = NULL;
+
+  request = ftp_request ("CCC", NULL);
+  written = fd_write (csock, request, strlen (request), -1);
+  if (written < 0)
+    {
+      err = WRITEFAILED;
+      goto bail;
+    }
+
+  err = ftp_response (csock, &response);
+  if (err != FTPOK)
+    goto bail;
+  if (*response != '2')
+    err = FTPNOCCC;
+
+bail:
+  if (request)
+    xfree (request);
+  if (response)
+    xfree (response);
+
   return err;
 }
 
@@ -527,7 +549,10 @@ ftp_prot (int csock, enum prot_level prot)
   int written = 0;
   char *request = NULL, *response = NULL;
   /* value must be a single character value */
-  char value[2] = {(char) prot, '\0'};
+  char value[2];
+
+  value[0] = prot;
+  value[1] = '\0';
 
   request = ftp_request ("PROT", value);
   written = fd_write (csock, request, strlen (request), -1);
@@ -551,7 +576,7 @@ bail:
 
   return err;
 }
-#endif
+#endif /* HAVE_SSL */
 
 /* Bind a port and send the appropriate PORT command to the FTP
    server.  Use acceptport after RETR, to get the socket of data
