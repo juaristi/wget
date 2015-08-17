@@ -1800,6 +1800,63 @@ read random data from EGD socket specified using this option.
 If this option is not specified (and the equivalent startup command is
 not used), EGD is never contacted.  EGD is not needed on modern Unix
 systems that support @file{/dev/urandom}.
+
+@cindex HSTS
+@item --no-hsts
+Wget supports HSTS (HTTP Strict Transport Security, RFC 6797) by default.
+Use @samp{--no-hsts} to make Wget act as a non-HSTS-compliant UA. As a
+consequence, Wget would ignore all the @code{Strict-Transport-Security}
+headers, and would not enforce any existing HSTS policy.
+
+@item --hsts-file=@var{file}
+By default, Wget stores its HSTS database in @file{~/.wget-hsts}.
+You can use @samp{--hsts-file} to override this. Wget will use
+the supplied file as the HSTS database. Such file must conform to the
+correct HSTS database format used by Wget. If Wget cannot parse the provided
+file, the behaviour is unspecified.
+
+The Wget's HSTS database is a plain text file. Each line contains an HSTS entry
+(ie. a site that has issued a @code{Strict-Transport-Security} header and that
+therefore has specified a concrete HSTS policy to be applied). Lines starting with
+a dash (@code{#}) are ignored by Wget. Please note that in spite of this implied
+"human readability" hand-hacking the HSTS database is generally not a good idea.
+
+An HSTS entry line consists of several fields separated by one or more whitespace:
+@code{<hostname> SP [<port>] SP <include subdomains> SP <created> SP <max-age>}
+
+Ths @var{hostname} and @var{port} fields indicate the hostname and port to which
+the given HSTS policy applies. The @var{port} field may be zero, and it will, in
+most of the cases. That means that the port number will not be taken into account
+when deciding whether such HSTS policy should be applied on a given request (only
+the hostname will be evaluated). When @var{port} is different to zero, both the
+target hostname and the port will be evaluated and the HSTS policy will only be applied
+if both of them match. This feature has been included for testing/development purposes only.
+The Wget testsuite (in @file{testenv/}) creates HSTS databases with explicit ports
+with the purpose of ensuring Wget's correct behaviour. Applying HSTS policies to ports
+other than the default ones is discouraged by RFC 6797 (see Appendix B "Differences
+between HSTS Policy and Same-Origin Policy"). Thus, this functionality should not be used
+in production environments. The last three fields do what they are expected to.
+@var{include_subdomains} can be either @code{1} or @code{0} and it signals whether the HSTS
+'include_subdomains' field is enabled or not. The @var{created} and @var{max-age} fields
+hold the timestamp values of when such entry was created (first seen by Wget) and the
+HSTS-defined value 'max-age'.
+
+Be aware though, that Wget may modify the provided file if any change occurs
+between the HSTS policies requested by the remote servers and those in the
+file. When Wget exists, it effectively updates the HSTS database by rewriting
+the database file with the new entries.
+
+If the supplied file does not exist, Wget will create an empty one. This file
+will have the new HSTS entries (if any) at the end of Wget execution.
+
+Care is taken not to override possible changes made by other Wget processes at
+the same time over the HSTS database. Before dumping the updated HSTS entries
+on the file, Wget will re-read it and merge the changes.
+
+Using a custom HSTS database and/or modifying an existing one is discouraged.
+For more information about the potential security threats arised from such practice,
+see section 14 "Security Considerations" of RFC 6797, specially section 14.9
+"Creative Manipulation of HSTS Policy Store".
 @end table
 
 @cindex WARC
