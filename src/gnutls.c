@@ -426,6 +426,19 @@ static struct transport_implementation wgnutls_transport =
 };
 
 bool
+ssl_disconnect_wget (int fd)
+{
+  bool success = false;
+  struct wgnutls_transport_context *ctx = (struct wgnutls_transport_context *) fd_transport_context (fd);
+
+  success = (gnutls_bye (ctx->session, GNUTLS_SHUT_RDWR) == GNUTLS_E_SUCCESS);
+
+  fd_unregister_transport (fd);
+  xfree (ctx);
+  return success;
+}
+
+bool
 ssl_connect_wget (int fd, const char *hostname, int *continue_session)
 {
 #ifdef F_GETFL

@@ -841,6 +841,22 @@ fd_register_transport (int fd, struct transport_implementation *imp, void *ctx)
   ++transport_map_modified_tick;
 }
 
+void
+fd_unregister_transport (int fd)
+{
+  struct transport_info *info = NULL;
+
+  if (transport_map)
+    info = hash_table_get (transport_map, (void *)(intptr_t) fd);
+
+  if (info)
+    {
+      hash_table_remove (transport_map, (void *)(intptr_t) fd);
+      xfree (info);
+      ++transport_map_modified_tick;
+    }
+}
+
 /* Return context of the transport registered with
    fd_register_transport.  This assumes fd_register_transport was
    previously called on FD.  */

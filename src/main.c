@@ -289,6 +289,7 @@ static struct cmdline_option option_data[] =
 #endif /* def __VMS */
     { "ftp-user", 0, OPT_VALUE, "ftpuser", -1 },
 #ifdef HAVE_SSL
+    { "ftps-clear-after-login", 0, OPT_BOOLEAN, "ftpsclearafterlogin", -1 },
     { "ftps-clear-data-connection", 0, OPT_BOOLEAN, "ftpscleardataconnection", -1 },
     { "ftps-fallback-to-ftp", 0, OPT_BOOLEAN, "ftpsfallbacktoftp", -1 },
     { "ftps-implicit", 0, OPT_BOOLEAN, "ftpsimplicit", -1 },
@@ -820,6 +821,20 @@ FTP options:\n"),
     N_("\
        --retr-symlinks             when recursing, get linked-to files (not dir)\n"),
     "\n",
+
+#ifdef HAVE_SSL
+    N_("\
+FTPS options:\n"),
+    N_("\
+       --ftps-implicit                 use implicit FTPS (default port is 990)\n"),
+    N_("\
+       --ftps-resume-ssl               resume the SSL/TLS session started in the control connection when\n"
+        "                                         opening a data connection\n"),
+    N_("\
+       --ftps-clear-data-connection    cipher the control channel only; all the data will be in plaintext\n"),
+    N_("\
+       --ftps-fallback-to-ftp          fall back to FTP if FTPS is not supported in the target server\n"),
+#endif
 
     N_("\
 WARC options:\n"),
@@ -1505,6 +1520,16 @@ for details.\n\n"));
       print_usage (1);
       exit (WGET_EXIT_GENERIC_ERROR);
     }
+
+#ifdef HAVE_SSL
+  if (opt.ftps_clear_after_login && opt.ftps_resume_ssl)
+    {
+      logputs (LOG_NOTQUIET, "WARNING: Cannot resume SSL sessions on the data channel "
+               "if --ftps-clear-after-login was specified.\n");
+      DEBUGP (("Setting --no-ftps-resume-ssl.\n"));
+      opt.ftps_resume_ssl = false;
+    }
+#endif
 
   if (opt.start_pos >= 0 && opt.always_rest)
     {
