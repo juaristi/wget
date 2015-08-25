@@ -46,6 +46,7 @@ as that of the covered work.  */
 #include "html-url.h"
 #include "css-url.h"
 #include "iri.h"
+#include "xstrndup.h"
 
 static struct hash_table *dl_file_url_map;
 struct hash_table *dl_url_file_map;
@@ -474,7 +475,8 @@ static char *
 convert_basename (const char *p, const struct urlpos *link)
 {
   int len = link->size;
-  char *url = NULL, *url_basename = NULL, *local_basename = NULL;
+  char *url = NULL;
+  char *org_basename = NULL, *local_basename = NULL;
   char *result = url;
 
   if (*p == '"' || *p == '\'')
@@ -485,22 +487,26 @@ convert_basename (const char *p, const struct urlpos *link)
   else
     url = xstrndup (p, len);
 
-  url_basename = strrchr (url, '/');
-  if (url_basename == NULL)
-    url_basename = url;
+  org_basename = strrchr (url, '/');
+  if (org_basename)
+    org_basename++;
+  else
+    org_basename = url;
 
   local_basename = strrchr (link->local_name, '/');
-  if (local_basename == NULL)
+  if (local_basename)
+    local_basename++;
+  else
     local_basename = url;
 
-  if (strcmp (url_basename, local_basename) == 0)
-    result = xstrdup (p);
-  else
-    {
-      url_set_file (link->url, local_basename);
-      result = xstrdup (link->url);
-    }
+  /*
+   * If the basenames differ, graft the adjusted basename (local_basename)
+   * onto the original URL.
+   */
+  if (strcmp (org_basename, local_basename))
+    url_set_file (link->url, local_basename);
 
+  result = xstrdup (url);
   xfree (url);
 
   return result;

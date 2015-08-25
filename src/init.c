@@ -141,7 +141,7 @@ static const struct {
   { "backupconverted",  &opt.backup_converted,  cmd_boolean },
   { "backups",          &opt.backups,           cmd_number },
   { "base",             &opt.base_href,         cmd_string },
-  { "basename-only",    &opt.basename_only,     cmd_boolean },
+  { "basenameonly",    &opt.basename_only,     cmd_boolean },
   { "bindaddress",      &opt.bind_address,      cmd_string },
   { "bodydata",         &opt.body_data,         cmd_string },
   { "bodyfile",         &opt.body_file,         cmd_string },
@@ -372,6 +372,7 @@ defaults (void)
   opt.htmlify = true;
   opt.http_keep_alive = true;
   opt.use_proxy = true;
+  opt.basename_only = false;
   tmp = getenv ("no_proxy");
   if (tmp)
     opt.no_proxy = sepstring (tmp);
