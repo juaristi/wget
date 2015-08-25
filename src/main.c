@@ -246,6 +246,7 @@ static struct cmdline_option option_data[] =
     { "backup-converted", 'K', OPT_BOOLEAN, "backupconverted", -1 },
     { "backups", 0, OPT_BOOLEAN, "backups", -1 },
     { "base", 'B', OPT_VALUE, "base", -1 },
+    { "basename-only", 0, OPT_BOOLEAN, "basenameonly", -1 },
     { "bind-address", 0, OPT_VALUE, "bindaddress", -1 },
     { "body-data", 0, OPT_VALUE, "bodydata", -1 },
     { "body-file", 0, OPT_VALUE, "bodyfile", -1 },
@@ -851,6 +852,7 @@ Recursive download:\n"),
     N_("\
   -k,  --convert-links             make links in downloaded HTML or CSS point to\n\
                                      local files\n"),
+    /* FIXME: help blurb for alternative, basename-only link convert option */
     N_("\
        --backups=N                 before writing file X, rotate up to N backup files\n"),
 
@@ -1359,11 +1361,14 @@ main (int argc, char **argv)
   /* All user options have now been processed, so it's now safe to do
      interoption dependency checks. */
 
-  if (opt.noclobber && opt.convert_links)
+  if (opt.noclobber && (opt.convert_links || opt.basename_only))
     {
       fprintf (stderr,
-               _("Both --no-clobber and --convert-links were specified,"
-                 " only --convert-links will be used.\n"));
+               opt.convert_links ?
+                   _("Both --no-clobber and --convert-links were specified,"
+                     " only --convert-links will be used.\n") :
+                    _("Both --no-clobber and --basename-only were specified,"
+                      " only --basename-only will be used.\n"));
       opt.noclobber = false;
     }
 
@@ -1417,11 +1422,11 @@ Can't timestamp and not clobber old files at the same time.\n"));
 #endif
   if (opt.output_document)
     {
-      if (opt.convert_links
+      if ((opt.convert_links || opt.basename_only)
           && (nurl > 1 || opt.page_requisites || opt.recursive))
         {
           fputs (_("\
-Cannot specify both -k and -O if multiple URLs are given, or in combination\n\
+Cannot specify both -k or --basename-only and -O if multiple URLs are given, or in combination\n\
 with -p or -r. See the manual for details.\n\n"), stderr);
           print_usage (1);
           exit (WGET_EXIT_GENERIC_ERROR);
@@ -1732,6 +1737,12 @@ for details.\n\n"));
 outputting to a regular file.\n"));
           exit (WGET_EXIT_GENERIC_ERROR);
         }
+      if (!output_stream_regular && (opt.convert_links || opt.basename_only))
+        {
+          fprintf (stderr, _("--convert-links or --basename-only can be used together \
+only if outputting to a regular file.\n"));
+          exit (WGET_EXIT_GENERIC_ERROR);
+        }
     }
 
 #ifdef __VMS
@@ -1941,7 +1952,7 @@ outputting to a regular file.\n"));
     save_hsts ();
 #endif
 
-  if (opt.convert_links && !opt.delete_after)
+  if ((opt.convert_links || opt.basename_only) && !opt.delete_after)
     convert_all_links ();
 
   cleanup ();

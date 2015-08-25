@@ -136,8 +136,9 @@ convert_links_in_hashtable (struct hash_table *downloaded_set,
                  form.  We do this even if the URL already is in
                  relative form, because our directory structure may
                  not be identical to that on the server (think `-nd',
-                 `--cut-dirs', etc.)  */
-              cur_url->convert = CO_CONVERT_TO_RELATIVE;
+                 `--cut-dirs', etc.). If --basename-only was passed,
+                 we only convert the basename portion of the URL.  */
+              cur_url->convert = (opt.basename_only ? CO_CONVERT_BASENAME_ONLY : CO_CONVERT_TO_RELATIVE);
               cur_url->local_name = xstrdup (local_name);
               DEBUGP (("will convert url %s to local %s\n", u->url, local_name));
             }
@@ -176,6 +177,8 @@ convert_links_in_hashtable (struct hash_table *downloaded_set,
    downloaded get converted to the relative URL which will point to
    that file.  And the other URLs get converted to the remote URL on
    the server.
+   FIXME: update above paragraph to include basename-only link adjustment
+   (where the beginning of the url -- protocol and host -- are left untouched.
 
    All the downloaded HTMLs are kept in downloaded_html_files, and
    downloaded URLs in urls_downloaded.  All the information is
@@ -206,6 +209,7 @@ static const char *replace_attr_refresh_hack (const char *, int, FILE *,
                                               const char *, int);
 static char *local_quote_string (const char *, bool);
 static char *construct_relative (const char *, const char *);
+static char *convert_basename (const char *, const struct urlpos *);
 
 /* Change the links in one file.  LINKS is a list of links in the
    document, along with their positions and the desired direction of
@@ -320,6 +324,28 @@ convert_links (const char *file, struct urlpos *links)
             ++to_file_count;
             break;
           }
+        case CO_CONVERT_BASENAME_ONLY:
+          {
+            char *newname = convert_basename (p, link);
+            char *quoted_newname = local_quote_string (newname, link->link_css_p);
+
+            if (link->link_css_p)
+              p = replace_plain (p, link->size, fp, quoted_newname);
+            else if (!link->link_refresh_p)
+              p = replace_attr (p, link->size, fp, quoted_newname);
+            else
+              p = replace_attr_refresh_hack (p, link->size, fp, quoted_newname,
+                                             link->refresh_timeout);
+
+            DEBUGP (("Converted basename only: %s to %s at position %d in %s.\n",
+                     link->url->url, newname, link->pos, file));
+
+            xfree (newname);
+            xfree (quoted_newname);
+            ++to_file_count;
+
+            break;
+          }
         case CO_CONVERT_TO_COMPLETE:
           /* Convert the link to absolute URL. */
           {
@@ -420,6 +446,64 @@ construct_relative (const char *basefile, const char *linkfile)
     memcpy (link + 3 * i, "../", 3);
   strcpy (link + 3 * i, linkfile);
   return link;
+}
+
+/* Construct and return a "transparent proxy" URL
+ * reflecting changes made by --adjust-extension to the file component
+ * (i.e., "basename") of the original URL, but leaving the "dirname"
+ * of the URL (protocol://hostname... portion) untouched.
+ *
+ * Think: populating a squid cache via a recursive wget scrape, where
+ * changing URLs to work locally with "file://..." is NOT desirable.
+
+   Example:
+
+   if
+                     p = "//foo.com/bar.cgi?xyz"
+   and
+      link->local_name = "docroot/foo.com/bar.cgi?xyz.css"
+   then
+
+      new_construct_func(p, link);
+   will return
+      "//foo.com/bar.cgi?xyz.css"
+
+   Essentially, we do s/$(basename orig_url)/$(basename link->local_name)/
+*/
+static char *
+convert_basename (const char *p, const struct urlpos *link)
+{
+  int len = link->size;
+  char *url = NULL, *url_basename = NULL, *local_basename = NULL;
+  char *result = url;
+
+  if (*p == '"' || *p == '\'')
+    {
+      len -= 2;
+      url = xstrndup (p + 1, len);
+    }
+  else
+    url = xstrndup (p, len);
+
+  url_basename = strrchr (url, '/');
+  if (url_basename == NULL)
+    url_basename = url;
+
+  local_basename = strrchr (link->local_name, '/');
+  if (local_basename == NULL)
+    local_basename = url;
+
+  if (strcmp (url_basename, local_basename) == 0)
+    result = xstrdup (p);
+  else
+    {
+      url_set_file (link->url, local_basename);
+      result = xstrdup (link->url);
+    }
+
+  xfree (url);
+
+  return result;
 }
 
 /* Used by write_backup_file to remember which files have been

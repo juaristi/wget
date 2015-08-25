@@ -2020,6 +2020,10 @@ Note that only at the end of the download can Wget know which links have
 been downloaded.  Because of that, the work done by @samp{-k} will be
 performed at the end of all the downloads.
 
+@c %** FIXME: blurb about alternative link conversion flag here
+@c %** (like --convert-links above, but leave "dirname link" alone,
+@c %**  and only convert "basename link", for online rather than local viewing)
+
 @cindex backing up converted files
 @item -K
 @itemx --backup-converted
