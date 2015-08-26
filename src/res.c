@@ -538,7 +538,7 @@ res_retrieve_file (const char *url, char **file, struct iri *iri)
 {
   struct iri *i = iri_new ();
   uerr_t err;
-  char *robots_url = uri_merge (url, RES_SPECS_LOCATION);
+  char *robots_url = uri_merge (url, RES_SPECS_LOCATION, NULL);
   int saved_ts_val = opt.timestamping;
   int saved_sp_val = opt.spider, url_err;
   struct url * url_parsed;
@@ -586,7 +586,7 @@ res_retrieve_file (const char *url, char **file, struct iri *iri)
 bool
 is_robots_txt_url (const char *url)
 {
-  char *robots_url = uri_merge (url, RES_SPECS_LOCATION);
+  char *robots_url = uri_merge (url, RES_SPECS_LOCATION, NULL);
   bool ret = are_urls_equal (url, robots_url);
 
   xfree (robots_url);

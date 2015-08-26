@@ -285,6 +285,7 @@ append_url (const char *link_uri, int position, int size,
   struct urlpos *newel;
   const char *base = ctx->base ? ctx->base : ctx->parent_base;
   struct url *url;
+  int url_flags = 0;
 
   struct iri *iri = iri_new ();
   set_uri_encoding (iri, opt.locale, true);
@@ -323,7 +324,7 @@ append_url (const char *link_uri, int position, int size,
          canonicalized, i.e. that "../" have been resolved.
          (parse_url will do that for us.) */
 
-      char *complete_uri = uri_merge (base, link_uri);
+      char *complete_uri = uri_merge (base, link_uri, &url_flags);
 
       DEBUGP (("%s: merge(%s, %s) -> %s\n",
                quotearg_n_style (0, escape_quoting_style, ctx->document_file),
@@ -340,6 +341,7 @@ append_url (const char *link_uri, int position, int size,
           iri_free (iri);
           return NULL;
         }
+      url->flags = url_flags;
       xfree (complete_uri);
     }
 
@@ -494,7 +496,7 @@ tag_handle_base (int tagid _GL_UNUSED, struct taginfo *tag, struct map_context *
 
   xfree (ctx->base);
   if (ctx->parent_base)
-    ctx->base = uri_merge (ctx->parent_base, newbase);
+    ctx->base = uri_merge (ctx->parent_base, newbase, NULL);
   else
     ctx->base = xstrdup (newbase);
 }
@@ -822,7 +824,7 @@ get_urls_file (const char *file)
       if (opt.base_href)
         {
           /* Merge opt.base_href with URL. */
-          char *merged = uri_merge (opt.base_href, url_text);
+          char *merged = uri_merge (opt.base_href, url_text, NULL);
           xfree (url_text);
           url_text = merged;
         }

@@ -915,7 +915,7 @@ url_parse (const char *url, int *error, struct iri *iri, bool percent_encode)
             {
               xfree (u->host);
               u->host = new;
-              u->idn_allocated = true;
+              u->flags |= URL_IDN_ALLOCATED;
               host_modified = true;
             }
         }
@@ -1194,7 +1194,7 @@ url_free (struct url *url)
 {
   if (url)
     {
-      if (url->idn_allocated) {
+      if (URL_FLAG (url->flags, URL_IDN_ALLOCATED)) {
         idn_free (url->host);      /* A dummy if !defined(ENABLE_IRI) */
         url->host = NULL;
       }
@@ -1856,8 +1856,9 @@ path_end (const char *url)
    idea for several reasons: 1) it complexifies the code, and 2)
    url_parse has to simplify path anyway, so it's wasteful to boot.  */
 
+/* FIXME process 'flags' */
 char *
-uri_merge (const char *base, const char *link)
+uri_merge (const char *base, const char *link, int *flags)
 {
   int linklength;
   const char *end;
@@ -1935,6 +1936,10 @@ uri_merge (const char *base, const char *link)
         memcpy (merge, base, span);
       memcpy (merge + span, link, linklength);
       merge[span + linklength] = '\0';
+
+      /* Set the proper flag to indicate the URL was a net path */
+      if (flags)
+        *flags |= URL_WAS_NET;
     }
   else if (*link == '/')
     {

@@ -338,6 +338,11 @@ convert_links (const char *file, struct urlpos *links)
               p = replace_attr_refresh_hack (p, link->size, fp, quoted_newname,
                                              link->refresh_timeout);
 
+            if (URL_FLAG (link->url->flags, URL_WAS_NET))
+              {
+                DEBUGP (("%s: THIS WAS A NET URL\n", link->url->url));
+              }
+
             DEBUGP (("Converted basename only: %s to %s at position %d in %s.\n",
                      link->url->url, newname, link->pos, file));
 
@@ -360,6 +365,11 @@ convert_links (const char *file, struct urlpos *links)
             else
               p = replace_attr_refresh_hack (p, link->size, fp, quoted_newlink,
                                              link->refresh_timeout);
+
+            if (URL_FLAG (link->url->flags, URL_WAS_NET))
+              {
+                DEBUGP (("%s: THIS WAS A NET URL\n", link->url->url));
+              }
 
             DEBUGP (("TO_COMPLETE: <something> to %s at position %d in %s.\n",
                      newlink, link->pos, file));
@@ -504,9 +514,12 @@ convert_basename (const char *p, const struct urlpos *link)
    * onto the original URL.
    */
   if (strcmp (org_basename, local_basename))
-    url_set_file (link->url, local_basename);
+    result = uri_merge (url, local_basename, NULL);
+  else
+    result = xstrdup (url);
+    /*url_set_file (link->url, local_basename);*/
 
-  result = xstrdup (url);
+  /*result = xstrdup (url);*/
   xfree (url);
 
   return result;

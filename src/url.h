@@ -96,10 +96,23 @@ struct url
   char *user;
   char *passwd;
 
-  /* 'host' is allocated by idna_to_ascii_8z() via idn_encode().
-   * Call 'idn_free()' to free this memory. */
-  bool idn_allocated;
+  /* Optional flags that give further information about this URL */
+  int flags;
 };
+
+/*
+ * Flags for the url structure above.
+ *
+ *  - URL_IDN_ALLOCATED: The 'host' portion was allocated by idna_to_ascii_8z() via idn_encode().
+ *  Eventually, idn_free() should be called to free that memory.
+ *  - URL_WAS_NET: The URL was originally a net URL (eg. //foo/bar)
+ *  that had later prefixed the protocol production when parsing.
+ */
+#define URL_IDN_ALLOCATED    1
+#define URL_WAS_NET          2
+
+/* Convenient macro to check whether a given flag is set */
+#define URL_FLAG(u, f) ((u & f) == f)
 
 /* Function declarations */
 
@@ -124,7 +137,7 @@ void scheme_disable (enum url_scheme);
 char *url_string (const struct url *, enum url_auth_mode);
 char *url_file_name (const struct url *, char *);
 
-char *uri_merge (const char *, const char *);
+char *uri_merge (const char *, const char *, int *);
 
 int mkalldirs (const char *);
 
